@@ -20,6 +20,7 @@ body{background:var(--bg);color:var(--fg);font-family:var(--body);overflow:hidde
 #title b{font-weight:700} #title span{color:var(--dim);font-size:11.5px;font-variant-numeric:tabular-nums}
 #facts{background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:10px 12px;-webkit-backdrop-filter:blur(18px);backdrop-filter:blur(18px)}
 #mapbox{position:absolute;right:max(12px,env(safe-area-inset-right,0px));top:calc(10px + env(safe-area-inset-top,0px));z-index:4;width:min(46vw,230px);aspect-ratio:14.96/9.9;background:rgba(10,13,18,.5);border:1px solid var(--line);border-radius:10px;-webkit-backdrop-filter:blur(10px);backdrop-filter:blur(10px);overflow:hidden}
+#mapcredit{position:absolute;right:3px;bottom:2px;padding:1px 3px;background:#172123;color:#e6e8e4;font:9px system-ui;text-decoration:none}
 #map{width:100%;height:100%;display:block;touch-action:none;cursor:pointer}
 #tip{position:absolute;left:0;top:0;z-index:5;pointer-events:none;padding:6px 10px;border-radius:9px;background:rgba(10,13,18,.82);border:1px solid var(--line);backdrop-filter:blur(8px);-webkit-backdrop-filter:blur(8px);font-size:13px;white-space:nowrap;box-shadow:0 4px 18px rgba(0,0,0,.35)}
 #tip b{font-weight:700} #tip span{margin-left:8px;color:var(--dim);font-size:12px;font-variant-numeric:tabular-nums}
@@ -70,6 +71,8 @@ input[type=range]::-moz-range-thumb{width:18px;height:18px;border-radius:50%;bac
     <div id="facts" hidden>
       <h1>광교 자연앤 센트레빌 1703동 1702호</h1>
       <p>84B · 17층 · 남동향 · 2029년 10월 입주 예정</p>
+      <p>원천동 633 · 9개 동 600세대 · 분양계획 기준 조망</p>
+      <p><a style="color:inherit" href="https://www.openstreetmap.org/copyright" target="_blank" rel="noopener">도로·정류장 © OpenStreetMap 기여자</a></p>
       <dl id="info">
         <dt>일출·일몰</dt><dd><span id="i-rise">–</span> · <span id="i-set">–</span></dd>
         <dt>해 위치</dt><dd id="i-sun">–</dd>
@@ -77,7 +80,7 @@ input[type=range]::-moz-range-thumb{width:18px;height:18px;border-radius:50%;bac
       </dl>
     </div>
   </div>
-  <div id="mapbox"><canvas id="map" aria-label="평면도. 눌러서 이동"></canvas></div>
+  <div id="mapbox"><canvas id="map" aria-label="평면도. 눌러서 이동"></canvas><a id="mapcredit" href="https://www.openstreetmap.org/copyright" target="_blank" rel="noopener" hidden>© OpenStreetMap</a></div>
   <div id="hud" class="min">
     <div class="panel">
       <div class="row"><label for="doy">날짜</label><input id="doy" type="range" min="0" max="364" step="1"><output id="dateLab" for="doy"></output></div>

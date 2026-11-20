@@ -86,39 +86,33 @@ function paintDetail() {
   }
   const granLight = '#d6d1c6', granMid = '#bfb9ad', granDark = '#989389', curb = '#e2ded5';
 
-  // 2) Exact Outer Curved Perimeter Promenade / Fire-Lane Loop (traced 1:1 from 단지배치도!)
-  const outerLoop = [
-    [338, 932], [412, 972], [486, 996], [562, 964], [596, 892], [608, 825],
-    [556, 762], [588, 706], [642, 646], [696, 586], [734, 526], [712, 466],
-    [662, 408], [608, 342], [582, 266], [546, 198], [480, 174], [412, 196],
-    [352, 224], [252, 268], [226, 342], [216, 434], [214, 512], [234, 566],
-    [206, 650], [186, 738], [160, 824], [168, 896], [244, 948], [318, 976],
+  // Walkway centrelines traced on the north-up distribution plan (cropped plan pixels).
+  const strokePlan = (points,width,color) => {
+    path(points.map(p=>planPoint(...p)));
+    g.lineWidth=width*k; g.strokeStyle=color; g.lineJoin='round'; g.lineCap='round'; g.stroke();
+  };
+  const paths = [
+    // Perimeter promenade around the nine blocks. The eastern bend stays inside the site.
+    [[282,456],[285,370],[292,291],[313,250],[350,241],[380,253],[440,200],[493,162],[549,147],
+     [604,150],[647,166],[680,201],[691,264],[705,336],[718,384],[747,425],[801,473],
+     [850,523],[871,575],[876,615],[851,665],[821,708],[792,752],[770,812],[749,888],
+     [718,945],[683,994],[673,1067],[655,1103],[611,1132],[563,1149],[499,1132]],
+    [[279,506],[271,562],[263,623],[247,682],[232,746],[219,802],[195,858],
+     [172,916],[163,956],[182,989],[215,1008],[247,1028]],
+    // Secondary paths between courtyards and building entrances.
+    [[281,458],[315,439],[356,432],[389,416],[415,382],[449,354],[490,337],[521,351],[551,382]],
+    [[263,622],[295,599],[326,618],[353,634]],
+    [[485,522],[551,472],[598,430],[647,388],[702,353]],
+    [[586,452],[582,503],[596,560],[629,600],[665,617],[702,614],[740,628],[758,657],
+     [752,695],[734,733],[710,768],[674,803],[643,833],[630,858],[643,892],[663,923],[690,940]],
+    [[393,675],[399,701],[426,741],[456,777],[426,802],[394,838],[365,870],[372,897],
+     [403,909],[448,911],[481,896],[511,866],[545,841],[580,820],[612,823],[643,833]],
+    [[219,803],[246,843],[281,877],[319,886],[365,870]],
+    [[454,914],[479,947],[495,978],[513,996],[550,1003],[590,997],[632,979],[683,994]],
   ];
-  strokeUV(outerLoop, 7.2, curb, true);
-  strokeUV(outerLoop, 5.8, granLight, true);
-  strokeUV(outerLoop, 4.6, '#cbc6bc', true, [1.6, 0.35]);
-
-  // 3) Exact Inner Courtyard Walkways & Loops (connecting all 9 towers & parks!)
-  const innerLoops = [
-    // Around ② 센트레 커넥트 파크 & 웰컴라운지
-    [[338, 932], [312, 872], [318, 804], [344, 748], [386, 686], [448, 668], [430, 738], [414, 814], [462, 868], [540, 826], [604, 824]],
-    // Between 1707 & 1708 connecting to 펀 그라운드
-    [[448, 668], [492, 718], [556, 762]],
-    // Between 1706 & 1707 connecting to 바이탈그라운드
-    [[486, 516], [568, 558], [634, 594], [696, 586]],
-    // Around ⑤ 아너스가든 & 1704/1705/1706
-    [[268, 378], [332, 372], [396, 304], [442, 248], [478, 178]],
-    [[332, 372], [398, 444], [488, 372], [442, 248]],
-    [[488, 372], [564, 326], [608, 342]],
-    // Around 1702 & 1703 lobbies
-    [[234, 566], [306, 578], [382, 646], [386, 686]],
-    [[382, 646], [326, 706], [268, 764], [186, 738]],
-    // South plaza connecting 1701 & 웰컴라운지
-    [[244, 948], [292, 902], [312, 872]],
-  ];
-  for (const lp of innerLoops) {
-    strokeUV(lp, 5.2, curb);
-    strokeUV(lp, 4.1, granLight);
+  for (const route of paths) {
+    strokePlan(route,5.6,curb);
+    strokePlan(route,4.7,granLight);
   }
 
   // Tower granite apron plazas around all 9 towers
@@ -128,9 +122,8 @@ function paintDetail() {
   }
 
   // 4) ① 비스타애비뉴 (Grand Straight Diagonal Axis from 51.5M 도로 to 사색공원!) + 블루아트갤러리 + 선큰 라운지
-  strokeUV([[165, 694], [268, 614], [388, 502], [574, 326]], 11.4, curb);
-  strokeUV([[165, 694], [268, 614], [388, 502], [574, 326]], 9.6, '#d8d3c8');
-  strokeUV([[165, 694], [268, 614], [388, 502], [574, 326]], 3.6, '#b6b0a4', false, [1.2, 1.0]);
+  const avenue = [[169,804],[286,708],[397,607],[485,526],[590,444],[705,353]];
+  strokePlan(avenue,10.0,curb); strokePlan(avenue,8.8,granMid); strokePlan(avenue,5.8,granLight);
   // Sunken timber lounge & emerald sculpture lawn in front of Vista waterfall (sp2_vista.jpg!)
   fillUV([[240, 628], [274, 598], [300, 624], [266, 654]], '#c9c3b8', curb, 0.8);
   fillUV([[252, 622], [274, 602], [292, 620], [270, 640]], '#8e6944'); // warm timber lounge deck
@@ -180,22 +173,23 @@ function paintDetail() {
   fillUV([[524, 858], [568, 818], [596, 848], [552, 888]], '#8d6c49', '#d8d3c7', 0.8); // 킨포크라운지 timber deck
 
   // 10) 주출입구 진입도로 + 원형 회전광장 (Roundabout) + 지하주차장 하강 램프 (1:1 with siteplan_fit.jpg & sp1_maingate.jpg!)
-  strokeUV([[312, 1022], [326, 976], [338, 932]], 9.6, '#383a40');
-  strokeUV([[312, 1022], [326, 976], [338, 932]], 0.28, '#e0b83c');
-  // Circular roundabout ring road around emerald center island at (338, 932)!
-  const [rbX, rbZ] = PUV(338, 932);
+  const entryDrive = [[358,1190],[370,1145],[381,1105],[395,1060]];
+  strokePlan(entryDrive,10.2,curb); strokePlan(entryDrive,9.4,'#383a40');
+  strokePlan(entryDrive,0.24,'#e0b83c');
+  const [rbX, rbZ] = P(...planPoint(395,1060));
   g.beginPath(); g.arc(rbX, rbZ, 11.2 * k, 0, 7); g.fillStyle = '#383a40'; g.fill();
   g.lineWidth = 1.6 * k; g.strokeStyle = curb; g.stroke();
   g.beginPath(); g.arc(rbX, rbZ, 5.2 * k, 0, 7); g.fillStyle = '#568036'; g.fill();
   g.lineWidth = 0.8 * k; g.strokeStyle = '#dfd9ce'; g.stroke();
   // Underground parking ramp branching off roundabout toward 웰컴라운지/1709동!
-  strokeUV([[352, 954], [380, 936], [408, 916]], 7.8, '#2b2d32');
-  strokeUV([[352, 954], [380, 936], [408, 916]], 0.25, '#e0b83c');
-
-  // 11) 부출입구 진입도로 + 부채꼴 지하주차장 램프 (1:1 with siteplan_fit.jpg!)
-  strokeUV([[152, 436], [208, 434], [248, 422], [284, 404]], 10.6, curb);
-  strokeUV([[152, 436], [208, 434], [248, 422], [284, 404]], 7.6, '#36383e');
-  strokeUV([[152, 436], [208, 434], [248, 422], [284, 404]], 0.26, '#e0b83c');
+  const garage = [[402,1078],[426,1080],[446,1093]];
+  strokePlan(garage,7.8,'#34363a'); strokePlan(garage,0.25,'#e0b83c');
+  // The southern drop-off is planned. Bay length and paint are schematic.
+  const dropOff = [[341,1154],[347,1141],[357,1111],[366,1100]];
+  strokePlan(dropOff,3.2,'#45484d');
+  const westDrive = [[207,490],[249,491],[272,479],[303,452],[331,440]];
+  strokePlan(westDrive,10.6,curb); strokePlan(westDrive,8.9,'#36383e');
+  strokePlan(westDrive,0.26,'#e0b83c');
 
   g.restore();
   const t = new THREE.CanvasTexture(c); t.colorSpace = THREE.SRGBColorSpace; t.flipY = false; t.anisotropy = 16; t.generateMipmaps = true; t.minFilter = THREE.LinearMipmapLinearFilter;
@@ -388,7 +382,11 @@ vec3 skyRefl(vec3 r){
   return sampleSky(rd);
 }
 void main(){
-  float seed=floor(vB.x*4096.0+0.5)/4096.0, kind=floor(mod(vB.y,16.0)+0.5), H=vB.z, len=abs(vB.w); bool blank=vB.w<0.0; bool roof=vB.y>=15.5;
+  // Interpolation can yield 15.999999 on a kind-0 roof. Round before unpacking
+  // the roof bit so neighbouring fragments select the same material.
+  float packedKind=floor(vB.y+0.5), kind=mod(packedKind,16.0);
+  float seed=floor(vB.x*4096.0+0.5)/4096.0, H=vB.z, len=abs(vB.w);
+  bool blank=vB.w<0.0, roof=packedKind>=16.0;
   vec3 n=normalize(vN); vec3 V=normalize(uCamPos-vW);
   vec3 h3=hash32(vec2(seed*91.7,seed*13.1+kind));
   vec3 alb; vec3 emit=vec3(0.0); float spec=0.0;
@@ -765,6 +763,7 @@ function buildCity() {
 }
 
 function buildTowers() {
+  WORLD.units = registerStacks();
   const G = new GeoBuf(); WORLD.towerInfo = {}; WORLD.towerSigns = [];
   const pip = (x, z, p) => { let c = false; for (let i = 0, j = p.length - 1; i < p.length; j = i++) { if ((p[i][1] > z) !== (p[j][1] > z) && x < (p[j][0] - p[i][0]) * (z - p[i][1]) / (p[j][1] - p[i][1]) + p[i][0]) c = !c; } return c; };
   const quad = (a, b, c, d, n, uvs, seed, kind, H) => {
@@ -776,6 +775,25 @@ function buildTowers() {
   for (const t of W.towers) {
     const pts = t.p, HR = 0.9 + t.levels * FLOOR_H, H = HR + 1.35, seed = (parseInt(t.name) * 0.137) % 1, n = pts.length;
     const cx = pts.reduce((s, p) => s + p[0], 0) / n, cz = pts.reduce((s, p) => s + p[1], 0) / n;
+    const opening = pilotiForWing(t);
+    const soffit = [], enclosed = [], threshold = [];
+    // Keep UV distance from the original facade origin across the cut.
+    function exterior(a,b,kind,lenArg) {
+      const length = Math.hypot(b[0]-a[0],b[1]-a[1]);
+      const wall = (p,q,y,u) => {
+        const start = G.uv.length;
+        G.wall(...p,...q,y,H,seed,kind,H,u,lenArg || length);
+        for (let k=start+1; k<G.uv.length; k+=2) G.uv[k] += y+0.5;
+      };
+      if (!opening) { wall(a,b,-0.5,0); return; }
+      const da = opening.side(a), db = opening.side(b);
+      (da >= 0 ? soffit : enclosed).push(a);
+      const base = d => d >= 0 ? opening.ceiling : -0.5;
+      if ((da >= 0) === (db >= 0)) { wall(a,b,base(da),0); return; }
+      const f = da/(da-db), cut = [lerp(a[0],b[0],f),lerp(a[1],b[1],f)];
+      soffit.push(cut); enclosed.push(cut); threshold.push(cut);
+      wall(a,cut,base(da),0); wall(cut,b,base(db),length*f);
+    }
     for (let i = 0; i < n; i++) {
       const a = pts[i], b = pts[(i + 1) % n];
       const eL = Math.hypot(b[0] - a[0], b[1] - a[1]);
@@ -809,13 +827,28 @@ function buildTowers() {
       if (t.name === '1703' && t.levels === 18 && i === 7) {
         const sp = 4.1 / eL;
         const mx = lerp(a[0], b[0], sp), mz = lerp(a[1], b[1], sp);
-        G.wall(a[0], a[1], mx, mz, -0.5, H, seed, 10, H, 0, 4.1);
-        G.wall(mx, mz, b[0], b[1], -0.5, H, seed, 5, H, 0, eL - 4.1);
+        exterior(a,[mx,mz],10,4.1);
+        exterior([mx,mz],b,5,eL-4.1);
         G.wall(b[0], b[1], a[0], a[1], HR, H, seed, 7, H);
         continue;
       }
-      G.wall(a[0], a[1], b[0], b[1], -0.5, H, seed, eKind, H, 0, lenArg);
+      exterior(a,b,eKind,lenArg);
       G.wall(b[0], b[1], a[0], a[1], HR, H, seed, 7, H);
+    }
+    if (opening && threshold.length === 2 && soffit.length >= 3) {
+      const y = opening.ceiling, [a,b] = threshold;
+      G.wall(...a,...b,-0.5,y,seed,7,y);
+      G.wall(...b,...a,-0.5,y,seed,7,y);
+      const start = G.i.length, vertex = G.nv;
+      G.roof(soffit,y,seed,7,H);
+      for (let j=start; j<G.i.length; j+=3) [G.i[j],G.i[j+1]] = [G.i[j+1],G.i[j]];
+      for (let j=vertex; j<G.nv; j++) G.n[j*3+1] = -1;
+      const center = soffit.reduce((s,p) => [s[0]+p[0]/soffit.length,s[1]+p[1]/soffit.length],[0,0]);
+      for (const p of soffit.filter(p => opening.side(p)>1)) {
+        const x=lerp(p[0],center[0],0.23), z=lerp(p[1],center[1],0.23);
+        G.prism([[x-.3,z-.3],[x+.3,z-.3],[x+.3,z+.3],[x-.3,z+.3]],-0.5,y,seed,7,y);
+      }
+      t.piloti = {enclosed, ceiling:y};
     }
     G.roof(pts, HR + 0.02, seed, 5, H);
     // Local frame along longest edge
@@ -860,7 +893,7 @@ function buildTowers() {
     }
     // Collect prominent street/courtyard faces for architectural crowns, logos & dong numbers
     if (!WORLD.towerInfo[t.name] || H > WORLD.towerInfo[t.name].H) {
-      WORLD.towerInfo[t.name] = { cx, cz, H, HR, pts, ux, uz, vx, vz, a0, a1, b0, b1 };
+      WORLD.towerInfo[t.name] = { plantRoof: mr && S2(...mr), cx, cz, H, HR, pts, ux, uz, vx, vz, a0, a1, b0, b1 };
     }
     if (t.top !== false && !seenDong.has(t.name)) {
       seenDong.add(t.name);
@@ -1046,6 +1079,31 @@ function buildTrees() {
     sets[key].push(x, y, z, sc, tk[i], r);
     if (d < 440) trunks.push(x, y, z, sc, con ? 1 : 0, r);
   }
+  // Rows of crown symbols along Blossom Garden, the eastern walk and the road frontage.
+  // Flowering and broadleaf forms approximate the plan; crown sizes are illustrative.
+  const planting = [
+    [2,[[364,606],[403,574],[446,541],[495,499],[540,461],[585,420],[634,383],[670,360]]],
+    [2,[[389,626],[433,591],[473,555],[517,521],[560,485],[599,451],[645,416],[679,388]]],
+    [2,[[600,838],[636,810],[666,775],[696,744],[725,704],[737,668]]],
+    [0,[[417,186],[466,153],[512,126],[560,114],[601,133],[650,153],[689,181]]],
+    [0,[[285,212],[278,254],[269,299],[266,343],[260,392],[254,432]]],
+    [0,[[224,546],[218,601],[212,649],[207,701],[198,744]]],
+    [0,[[128,1024],[164,1051],[202,1077],[242,1101],[283,1120],[318,1133]]],
+    [0,[[415,1149],[461,1153],[505,1159],[549,1163],[594,1167],[639,1172],[668,1172]]],
+  ];
+  for (const [kind,row] of planting) {
+    for (let i=1; i<row.length; i++) {
+      const a=planPoint(...row[i-1]), b=planPoint(...row[i]);
+      const intervals=Math.max(1,Math.round(Math.hypot(b[0]-a[0],b[1]-a[1])/6.5));
+      for (let k=0; k<intervals; k++) {
+        const x=lerp(a[0],b[0],k/intervals), z=lerp(a[1],b[1],k/intervals);
+        if (!pip(x,z,W.site) || W.towers.some(t=>pip(x,z,t.p))) continue;
+        if (sets.nrB.some((v,j,list)=>j%6===0 && Math.hypot(v-x,list[j+2]-z)<3.8)) continue;
+        const seed=(Math.sin(x*2+z)*1973)%1+1, r=seed%1, size=2.0+0.7*r, y=groundY(x,z);
+        sets.nrB.push(x,y,z,size,kind,r); trunks.push(x,y,z,size,0,r);
+      }
+    }
+  }
   const grp = new THREE.Group(); let tris = 0;
   const leafTex = paintLeaves();
   const mk = (geo, list, inner = 1) => {
@@ -1150,6 +1208,19 @@ function buildWater() {
 function buildLamps() {
   const ro = arr('r_off'), rx = arr('r_xy'), rw = arr('r_w'), rc = arr('r_c'); const pos = [], seed = [];
   WORLD.poleSpots = []; // also populate 3D street light poles near complex!
+  const mapped = NEIGHBORHOOD.fixtures.filter(f => f.highway === 'street_lamp');
+  const localWays = [...NEIGHBORHOOD.roads,...NEIGHBORHOOD.otherWays];
+  for (const lamp of mapped) {
+    const [x,z]=lamp.p, y=groundY(x,z);
+    const nearest=nearestStreet(x,z,localWays);
+    // Only the position and mounting type are mapped. Aim the modeled head toward the road.
+    const angle=nearest ? Math.atan2(z-nearest.pz,nearest.px-x) : 0;
+    const pole=lamp.lamp_mount==='bent_mast';
+    const height=pole ? 8.8 : 4.0, arm=pole ? 1.62*height/9 : 0;
+    if (pole) WORLD.poleSpots.push([x,y,z,angle,height]);
+    pos.push(x+arm*Math.cos(angle),y+height,z-arm*Math.sin(angle));
+    seed.push(0.8,2);
+  }
   for (let i = 0; i < rw.length; i++) {
     const c = rc[i] & 7; if (c < 1 || c > 5 || (rc[i] & 8)) continue;
     const w = rw[i] / 5, ow = !!(rc[i] & 16);
@@ -1160,7 +1231,9 @@ function buildLamps() {
       while (acc < L) {
         const sd = ow ? 1 : side;
         const x = x0 + ux * acc - uz * sd * (w / 2 + 1.1), z = z0 + uz * acc + ux * sd * (w / 2 + 1.1);
-        if (Math.abs(x) < 7900 && Math.abs(z) < 7900) {
+        const mappedNearby = Math.abs(x)<580 && Math.abs(z)<580 &&
+          mapped.some(f => Math.abs(f.p[0]-x)<20 && Math.hypot(f.p[0]-x,f.p[1]-z)<20);
+        if (Math.abs(x) < 7900 && Math.abs(z) < 7900 && !mappedNearby) {
           const gy = groundY(x, z), lh = c >= 2 ? 9.2 : 6.4;
           pos.push(x, gy + lh, z); seed.push(((i * 31 + v) * 0.6180339) % 1, c);
           if (Math.hypot(x, z) < 520 && c >= 2 && Math.hypot(x - 110, z + 132) > 14 && Math.hypot(x - 28, z - 52) > 12) WORLD.poleSpots.push([x, gy, z, Math.atan2(-uz * sd, ux * sd), lh]);
@@ -1171,14 +1244,15 @@ function buildLamps() {
     }
   }
   // Complex warm bollard & avenue lights
-  const [aa, ab] = W.ave;
-  for (let k = 0; k <= 14; k++) {
-    const t = k / 14, x = lerp(aa[0], ab[0], t), z = lerp(aa[1], ab[1], t);
-    pos.push(x, 3.6, z + 5.8, x, 3.6, z - 5.8); seed.push(0.92, 1, 0.92, 1);
-  }
-  for (let i = 0; i < 48; i++) {
-    const p = W.site[i % W.site.length], q = W.site[(i * 7 + 3) % W.site.length], t = (i * 0.618) % 1;
-    pos.push(lerp(p[0], q[0], t) * 0.82, 3.8, lerp(p[1], q[1], t) * 0.82 - 12); seed.push(0.95, 1);
+  const start=planPoint(169,804), end=planPoint(705,353);
+  const dx=end[0]-start[0], dz=end[1]-start[1], length=Math.hypot(dx,dz);
+  for (let i=1;i<15;i++) {
+    const t=i/15;
+    for (const side of [-1,1]) {
+      const x=lerp(start[0],end[0],t)-side*dz/length*5.4;
+      const z=lerp(start[1],end[1],t)+side*dx/length*5.4;
+      pos.push(x,groundY(x,z)+1.1,z); seed.push(0.92,1);
+    }
   }
   // Red aviation obstruction beacons atop surrounding skyscrapers (>65m)
   const bcn = WORLD.beacons || [];
@@ -1214,21 +1288,21 @@ function buildCars() {
       if (pts.length) L += Math.hypot(x - pts[pts.length - 1][0], z - pts[pts.length - 1][1]);
       pts.push([x, z, L]); nearest = Math.min(nearest, Math.hypot(x, z));
     }
-    if (L > 55 && nearest < 2600) paths.push({ pts, L, w: rw[i] / 5, c, tunnel: !!(rc[i] & 8), ow });
+    if (L > 55 && nearest < 2600) paths.push({ pts, L, w: rw[i] / 5, c, tunnel: !!(rc[i] & 8), direction: roadDirection(pts,ow) });
   }
   const cars = []; let s = 4242; const rnd = () => (s = (s * 1664525 + 1013904223) >>> 0) / 4294967296;
   for (const p of paths) {
     const n = Math.round(p.L / (p.c >= 4 ? 52 : 76));
-    const dirs = p.ow ? [1] : [1, -1];
+    const dirs = p.direction ? [p.direction] : [1, -1];
     for (let k = 0; k < n; k++) for (const dir of dirs) if (rnd() < 0.56) {
       let laneOff;
-      if (p.ow) {
+      if (p.direction) {
         const nl = Math.max(1, Math.round(p.w / 3.3));
         const li = Math.floor(rnd() * nl);
         laneOff = (-0.5 * (nl - 1) + li) * Math.min(3.2, (p.w - 1.2) / Math.max(nl, 1));
       } else {
         const nl = Math.max(1, Math.floor(p.w / 6.8));
-        laneOff = dir * -(0.5 + Math.floor(rnd() * nl)) * 3.1;
+        laneOff = dir * (0.5 + Math.floor(rnd() * nl)) * 3.1;
       }
       cars.push({ p, t: rnd() * p.L, dir, laneOff, v: (p.c >= 4 ? 13.5 : 9.2) * (0.8 + rnd() * 0.45), col: Math.floor(rnd() * 8) });
     }

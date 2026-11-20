@@ -10,7 +10,7 @@ const WEATHER = {
 const WX = { ...WEATHER.clear };            // smoothed current weather
 const ENV = { exp: 1, expTarget: 1, lampOn: false, sunAlt: 0, sunAz: 0, dirty: true };
 let renderer, cam, extScene, homeScene, precip, marker;
-const view = { yaw: 0, pitch: -0.04, fov: 62, pos: new THREE.Vector3(0.5, FY + EYE, 3.4), tyaw: 0, tpitch: -0.04, tpos: new THREE.Vector3(0.5, FY + EYE, 3.4), tfov: 62, drone: false, dAz: 0.6, dEl: 0.32, dDist: 150 };
+const view = { yaw: 0, pitch: -0.04, fov: 62, pos: new THREE.Vector3(0.5, FY + EYE, 3.4), tyaw: 0, tpitch: -0.04, tpos: new THREE.Vector3(0.5, FY + EYE, 3.4), tfov: 62, drone: false, dAz: 1.65, dEl: 0.68, dDist: 405 };
 const VIEWS = {
   living: { p: [0.75, 3.75], yaw: -0.10, pitch: -0.05, label: '거실' },
   window: { p: [0.0, 0.95], yaw: 0.0, pitch: -0.10, label: '창가' },
@@ -27,7 +27,6 @@ const VIEWS = {
 
 const _v = new THREE.Vector3(), _c = [0, 0, 0];
 const lum = (c) => 0.2126 * c[0] + 0.7152 * c[1] + 0.0722 * c[2];
-function pip(x, z, poly) { let inside = false; for (let i = 0, j = poly.length - 1; i < poly.length; j = i++) { const a = poly[i], b = poly[j]; if ((a[1] > z) !== (b[1] > z) && x < (b[0] - a[0]) * (z - a[1]) / (b[1] - a[1]) + a[0]) inside = !inside; } return inside; }
 function sunBlocked(ox, oy, oz, d) {
   for (let t = 8; t < 420; t += 3) {
     const x = ox + d.x * t, y = oy + d.y * t, z = oz + d.z * t; if (y > 75) return false;
@@ -173,9 +172,11 @@ const roomAt = (x, z) => { for (const r of RLIST) if (x >= r[1] && x <= r[2] && 
 function walkable(x, z, R = 0.2) { if (x < -2.05 || x > 11.93 || z < 0.6 || z > 9.25) return false; for (const b of HOME.solid) if (x > b[0] - R && x < b[1] + R && z > b[2] - R && z < b[3] + R) return false; return true; }
 function drawMap() {
   const c = $('map'); if (!c) return; const w = c.clientWidth, h = c.clientHeight; if (!w || !h) return;
-  const key = w + (view.drone ? 'd' : view.pos.x.toFixed(2) + ',' + view.pos.z.toFixed(2) + ',' + view.yaw.toFixed(2) + ',' + view.fov.toFixed(0)); if (key === drawMap.k) return; drawMap.k = key;
+  const heading = view.drone ? cam.getWorldDirection(_v) : null;
+  const key = w + (view.drone ? 'd'+Math.round(cam.position.x)+','+Math.round(cam.position.z)+','+Math.atan2(heading.x,-heading.z).toFixed(2) : view.pos.x.toFixed(2) + ',' + view.pos.z.toFixed(2) + ',' + view.yaw.toFixed(2) + ',' + view.fov.toFixed(0)); if (key === drawMap.k) return; drawMap.k = key;
   const d = Math.min(devicePixelRatio || 1, 3); if (c.width !== Math.round(w * d)) { c.width = Math.round(w * d); c.height = Math.round(h * d); }
   const g = c.getContext('2d'); g.setTransform(d, 0, 0, d, 0, 0); g.clearRect(0, 0, w, h);
+  if (view.drone) { drawSiteMap(g,w,h,heading); return; }
   const pad = 6, s = Math.min((w - 2 * pad) / (PLAN.x1 - PLAN.x0), (h - 2 * pad) / (PLAN.z1 - PLAN.z0)), ox = (w - s * (PLAN.x1 - PLAN.x0)) / 2, oz = (h - s * (PLAN.z1 - PLAN.z0)) / 2;
   const X = (x) => ox + (PLAN.x1 - x) * s, Z = (z) => oz + (PLAN.z1 - z) * s, R = (x0, x1, z0, z1) => g.fillRect(X(x1), Z(z1), (x1 - x0) * s, (z1 - z0) * s);
   drawMap.inv = (px, py) => [PLAN.x1 - (px - ox) / s, PLAN.z1 - (py - oz) / s];
@@ -198,6 +199,8 @@ function goView(name, instant) {
     const dx = c[0] - view.tpos.x, dy = c[1] - view.tpos.y, dz = c[2] - view.tpos.z; view.tyaw = Math.atan2(dx, -dz); view.tpitch = Math.atan2(dy, Math.hypot(dx, dz)); view.tfov = 55;
     view.pos.copy(view.tpos); view.yaw = view.tyaw; view.pitch = view.tpitch; view.fov = 55; if (!SHOT && !view.flown) { view.flown = 1; const el = $('toast'); if (el) { el.textContent = matchMedia('(pointer:coarse)').matches ? '끌어서 둘러보고, 왼쪽 패드로 보는 방향으로 날아갑니다' : '끌어서 둘러보기 · WASD 비행 · Q/E 내려가기/올라가기 · Shift 빠르게'; el.hidden = false; setTimeout(() => { el.hidden = true; }, 5000); } } }
   { const db = $('drone'); if (db) { db.setAttribute('aria-pressed', view.drone); db.textContent = view.drone ? '집 안으로' : '단지 전경'; } const ob = $('orbit'); if (ob) { ob.hidden = !view.drone; ob.setAttribute('aria-pressed', !!view.orbit); } $('stick').classList.toggle('off', !!(view.drone && view.orbit)); }
+  $('mapcredit').hidden = !view.drone;
+  $('map').setAttribute('aria-label',view.drone ? '북쪽 기준 단지와 주변 도로 배치도. 눌러서 상공으로 이동' : '평면도. 눌러서 이동');
   if (marker) marker.visible = view.drone; ENV.dirty = true;
 }
 
@@ -216,8 +219,14 @@ function setupUI() {
   $('orbit').onclick = () => { if (!view.orbit) { const c = [0, FY * 0.7, -25], dx = view.pos.x - c[0], dy = view.pos.y - c[1], dz = view.pos.z - c[2]; view.dDist = clamp(Math.hypot(dx, dy, dz), 60, 600); view.dAz = Math.atan2(dx, -dz); view.dEl = clamp(Math.asin(clamp(dy / Math.hypot(dx, dy, dz), -1, 1)), 0.03, 1.4); view.orbit = true; view.flown = 1; goView('drone', true); } else { view.orbit = false; goView('drone', true); } };
   $('drone').onclick = () => goView(view.drone ? 'living' : 'drone', true);
   { const mp = $('map'); const go = (e) => { if (!drawMap.inv) return; const r = mp.getBoundingClientRect(), [x, z] = drawMap.inv(e.clientX - r.left, e.clientY - r.top); let best = null;
+      if (view.drone) {
+        if (view.orbit) { view.orbit=false; $('orbit').setAttribute('aria-pressed','false'); $('stick').classList.remove('off'); }
+        view.pos.set(x,Math.max(view.pos.y,groundY(x,z)+85),z); view.tpos.copy(view.pos);
+        view.pitch=view.tpitch=-0.9;
+        return;
+      }
       for (let rad = 0; rad <= 1.2 && !best; rad += 0.15) for (let a = 0; a < 12; a++) { const px = x + Math.cos(a * 0.5236) * rad, pz = z + Math.sin(a * 0.5236) * rad; if (walkable(px, pz) && roomAt(px, pz)) { best = [px, pz]; break; } }
-      if (!best) return; if (view.drone) goView('living', true);
+      if (!best) return;
       const far = Math.hypot(best[0] - view.pos.x, best[1] - view.pos.z) > 1.2; view.tpos.x = best[0]; view.tpos.z = best[1]; if (far) { view.pos.x = best[0]; view.pos.z = best[1]; } };
     mp.addEventListener('pointerdown', (e) => { e.preventDefault(); mp.setPointerCapture(e.pointerId); go(e); }); mp.addEventListener('pointermove', (e) => { if (e.buttons || e.pointerType === 'touch') go(e); }); }
   // look controls
@@ -362,7 +371,7 @@ async function boot() {
   const size = () => [cv.clientWidth || innerWidth, cv.clientHeight || innerHeight]; let [w, h] = size(); renderer.setSize(w, h, false);
   const prog = (p, t) => { $('bar').style.width = Math.round(p * 100) + '%'; if (t) $('loadmsg').textContent = t; };
   prog(0.05, '지형과 도시 자료를 불러오는 중');
-  await loadWorld(); demN = arr('dem_n'); demF = arr('dem_f'); U.uHF.value = W.HF;
+  await loadWorld(); W.site = SITE_OUTLINE.map(p=>planPoint(...p)); demN = arr('dem_n'); demF = arr('dem_f'); U.uHF.value = W.HF;
   const [satN, satF, paint, satIn] = await Promise.all([loadTex('sat_near.jpg'), loadTex('sat_far.jpg'), loadTex('roadpaint.png', true).catch(() => null), loadTex('sat_inner.jpg').catch(() => null)]); HAS_PAINT = !!paint; if (paint) { paint.flipY = false; paint.needsUpdate = true; paint.generateMipmaps = true; paint.minFilter = THREE.LinearMipmapLinearFilter; paint.anisotropy = 16; } if (satIn) { satIn.flipY = false; satIn.needsUpdate = true; } prog(0.45, '지형을 세우는 중');
   U.uNoise.value = makeNoiseTex(256);
   cam = new THREE.PerspectiveCamera(62, w / h, 0.05, 160000); cam.rotation.order = 'YXZ';

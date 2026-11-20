@@ -28,3 +28,15 @@ three.js는 jsDelivr CDN에서 받으므로 인터넷이 필요하다.
 ## 다시 만들기
 
 src/를 고친 뒤 `python3 build.py` → `gwanggyo-view.html`. `python3 build.py local`은 node_modules의 three를 쓰는 index.html을 만든다 (`npm i three@0.169.0` 필요).
+
+## 단지와 도로 확인하기
+
+**단지 전경**을 누르면 9개 동과 법원지하차도를 함께 볼 수 있다. 오른쪽 위 배치도는 북쪽이 위이며, 누른 위치의 상공으로 이동한다. 건물·도로·정류장 위에 포인터를 올리거나 터치하면 동의 주거층, 도로명, 정류장 이름을 확인할 수 있다.
+
+![남서쪽 상공에서 바라본 단지와 주변 도로](docs/overview.jpg)
+
+도로 지도 자료 © [OpenStreetMap 기여자](https://www.openstreetmap.org/copyright).
+
+[조사 자료, 동별 층수표와 검증 오차](docs/site-research.md) · [도로·정류장 데이터](data/neighborhood.json)
+
+저장소 루트에서 `node tests/site.mjs`로 배치 및 도로 검증을 실행한다.
