@@ -2,7 +2,10 @@
 import math
 
 import shapely as shp
-from shapely.geometry import LineString, Point
+import numpy as np
+from shapely.geometry import LineString, Point, Polygon
+from frontage import cubic_turn, turning_path
+from shapely.ops import substring
 
 
 def plan_point(uv, frame):
@@ -20,7 +23,7 @@ def ease_path(points):
 
 
 class Entrance:
-    def __init__(self, name, spec, frame, ways, public, terrain):
+    def __init__(self, name, spec, frame, ways, public, terrain, street):
         project=lambda p: plan_point(p,frame)
         lanes=[LineString(w['p']) for w in ways if w.get('name')==spec['street'] and w.get('tunnel')!='yes']
         frontage=Point(project(spec['frontage']))
@@ -51,7 +54,16 @@ class Entrance:
             arc=[(cx+spec['fanRadius']*math.cos(a+span*i/24),cz+spec['fanRadius']*math.sin(a+span*i/24)) for i in range(25)]
             tx,tz=-math.sin(a+span)*math.copysign(1,span),math.cos(a+span)*math.copysign(1,span)
             self.end=Point(arc[-1][0]+tx*spec['portalDepth'],arc[-1][1]+tz*spec['portalDepth'])
-            self.axis=LineString([*ease_path([*points,arc[0]]).coords,*arc[1:],self.end.coords[0]])
+            # Enter the fan tangentially. A straight approach to its first
+            # radial rib otherwise makes a sharp bend at the reader island.
+            along=np.array(points[1])-points[0]
+            along/=np.linalg.norm(along)
+            lead=np.array(points[0])+3.0*along
+            join=4
+            station_angle=a+span*join/24
+            tangent=np.array([-math.sin(station_angle),math.cos(station_angle)])*math.copysign(1,span)
+            shoulder=cubic_turn(lead,np.array(arc[join]),along,tangent)
+            self.axis=LineString([points[0],*shoulder,*arc[join+1:],self.end.coords[0]])
             shape=self.axis.buffer(spec['width']/2,cap_style='flat',quad_segs=12)
         # Start exactly on the parcel-facing edge of this carriageway.
         outside=self.axis.difference(public)
@@ -70,12 +82,46 @@ class Entrance:
             slope=(terrain(after.x,after.y)-terrain(before.x,before.y))/length
             self.grade={'tangent':[tx,tz], 'slope':max(-0.06,min(0.06,slope)),
                         'height':self.street_height, 'inner':8, 'outer':18}
-        returns=public.union(shape).buffer(4).buffer(-4).intersection(self.mouth.buffer(13))
+        self.routes={key:turning_path(street,self.axis,self.mouth,key=='in',spec['width']/4)
+                     for key in ('in','out')}
+        # Sweep a 4.6 m passenger car from its rear axle, with 0.25 m of
+        # lateral clearance. This sizes both curb returns through the turn.
+        envelopes=[]
+        for route in self.routes.values():
+            for d in np.arange(0.2,route.length-0.2,0.35):
+                p=np.array(route.interpolate(d).coords[0])
+                v=np.array(route.interpolate(d+0.15).coords[0])-p
+                v/=np.linalg.norm(v)
+                n=np.array([-v[1],v[0]])
+                envelopes.append(Polygon([p+u*v+w*n for u,w in
+                                 [(-1,-1.2),(3.6,-1.2),(3.6,1.2),(-1,1.2)]]))
+        shape=shape.union(shp.union_all(envelopes))
+        if name=='west':
+            self.gate=self.axis.interpolate(self.start+8.8)
+        # Round only the two throat corners. Closing the entire ramp footprint
+        # would bridge the gap between the public road and the fan's outer bend.
+        throat=substring(self.axis,0,self.start+8).buffer(spec['width']/2,cap_style='flat')
+        junction=street.deck.union(throat)
+        returns=junction.buffer(6,quad_segs=16).buffer(-6,quad_segs=16).difference(junction)
+        returns=returns.intersection(self.mouth.buffer(14))
         self.drive=shape.union(returns).difference(public).difference(self.island)
         # Sidewalk follows the returns. The mouth and garage thresholds stay open.
         self.walk=self.drive.buffer(1.4).difference(shp.union_all([self.drive,public,self.island,
             self.end.buffer(5),self.junction.buffer(4)]))
         self.area=self.drive.union(self.walk)
+        if name=='west':
+            # The canopy sits on the original radial grid. Start its outer
+            # wall only where the full wall thickness clears the new throat.
+            self.fan_walls=[]
+            for i in range(8):
+                angles=[a+span*k/8 for k in (i,i+1)]
+                wall=LineString([(cx+22.1*math.cos(t),cz+22.1*math.sin(t)) for t in angles])
+                for part in shp.get_parts(wall.difference(self.area.buffer(0.45))):
+                    if part.geom_type=='LineString' and part.length>0.35:
+                        self.fan_walls.append([part.coords[0],part.coords[-1],(i+0.5)/8])
+        station=self.axis.project(self.gate)
+        before,after=(self.axis.interpolate(station+d) for d in (-0.15,0.15))
+        self.gate_heading=math.atan2(after.x-before.x,before.y-after.y)
         self.heading=math.atan2(self.gate.x-self.mouth.x,-(self.gate.y-self.mouth.y))
 
     def public_offset(self,x,z):

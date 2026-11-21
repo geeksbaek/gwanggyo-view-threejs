@@ -8,6 +8,7 @@ from pathlib import Path
 import struct
 
 from entrances import Entrance
+from frontage import Frontage
 
 import numpy as np
 import shapely as shp
@@ -168,7 +169,12 @@ walk = shp.union_all([registered_walk,transition.buffer(1.9).intersection(box(26
 # Avoid invented walkways across a trace cut or the study perimeter.
 walk = walk.difference(window.boundary.buffer(0.12)).difference(study.boundary.buffer(1))
 specs=json.loads((root/'data/entrances.json').read_text())
-gates=[Entrance(name,spec,world['frame'],mapping['roads'],road,terrain) for name,spec in specs.items()]
+frontages={name:Frontage(name,spec,road) for name,spec in specs.items()}
+for street in frontages.values():
+    road=road.difference(street.mask).union(street.deck.difference(trench))
+    walk=walk.difference(street.mask).union(street.walk)
+walk=walk.difference(road)
+gates=[Entrance(name,spec,world['frame'],mapping['roads'],road,terrain,frontages[name]) for name,spec in specs.items()]
 excavation=shp.union_all([g.area for g in gates])
 walk=walk.difference(excavation)
 west=next(g for g in gates if g.name=='west')
@@ -180,10 +186,13 @@ excavation=excavation.union(graded)
 gx,gz,ex,ez=graded.bounds
 cells=[graded.intersection(box(x,z,x+2,z+2)) for x in np.arange(gx,ex,2) for z in np.arange(gz,ez,2)]
 def public_surface(name,shape,base):
-    surface(name,shape.difference(graded),base)
+    # The independent surveyed strips share long coincident boundaries.
+    # Snap overlays to 0.1 mm so GEOS cannot flip a tiny sliver into a cell.
+    shape=shp.union_all(list(parts(shape,'Polygon')))
+    surface(name,shp.difference(shape,graded,grid_size=0.0001),base)
     for cell in cells:
-        if not cell.is_empty and cell.intersects(shape):
-            surface(name,shape.intersection(cell),lambda x,z:base(x,z)+west.public_offset(x,z)-0.075)
+        if cell.geom_type in ('Polygon','MultiPolygon') and cell.intersects(shape):
+            surface(name,shp.intersection(shape,cell,grid_size=0.0001),lambda x,z:base(x,z)+west.public_offset(x,z)-0.075)
 
 def public_walls(boundary,top,bottom=lambda x,z:0.035):
     walls(boundary.difference(graded),top,bottom)
@@ -212,33 +221,63 @@ for j in range(math.floor((bounds[1]+half)/step),math.floor((bounds[3]+half)/ste
 
 for gate in gates:
     # A flush pedestrian apron carries the sidewalk across the driveway.
-    crossing=gate.axis.interpolate(gate.start+2.0)
-    ahead=gate.axis.interpolate(gate.start+2.5)
-    dx,dz=ahead.x-crossing.x,ahead.y-crossing.y
-    length=math.hypot(dx,dz)
-    nx,nz=-dz/length,dx/length
-    apron_axis=LineString([(crossing.x-12*nx,crossing.y-12*nz),(crossing.x+12*nx,crossing.y+12*nz)])
-    apron=apron_axis.buffer(0.9,cap_style='flat').intersection(gate.drive)
+    street=frontages[gate.name]
+    apron_axis=street.curb.offset_curve(1.05)
+    apron=street.walk.intersection(gate.drive)
     surface(gate.name+'Drive',gate.drive.difference(apron),gate.offset)
     surface('apron',apron,gate.offset)
     def side_top(x,z):
         # Taper the curb returns down to the pedestrian apron.
-        rise=max(0,min(1,(apron_axis.distance(Point(x,z))-0.9)/1.5))
+        rise=max(0,min(1,(apron_axis.distance(Point(x,z))-1.05)/1.5))
         return gate.offset(x,z)+0.012+0.14*rise
-    strip=gate.walk.intersection(gate.drive.boundary.buffer(0.22))
+    strip=gate.walk.intersection(gate.drive.boundary.buffer(0.22)).difference(street.walk)
     surface('entranceWalk',gate.walk.difference(strip),side_top)
     surface('granite',strip,side_top)
     walls(gate.walk.boundary.difference(road.buffer(0.02)),side_top,gate.offset)
     walls(gate.area.boundary.difference(road.buffer(0.08)),side_top,
           bottom=lambda x,z:-0.03,material='retaining')
-    # Stop the driveway centre marking before the public lane and roundabout.
-    end=gate.axis.length-(12 if gate.name=='main' else 7)
-    line=substring(gate.axis,gate.start+4.8,end)
-    surface('yellow',line.buffer(0.075,cap_style='flat').intersection(gate.drive),
-            lambda x,z:gate.offset(x,z)+0.014)
+    # Keep the sidewalk crossing and the circulating lane free of centre paint.
+    end=gate.axis.length-(12 if gate.name=='main' else 1.0)
+    line=substring(gate.axis,gate.start+3.25,end)
+    paint=lambda x,z:gate.offset(x,z)+0.014
+    def drive_mark(name,geometry):
+        surface(name,geometry.intersection(gate.drive).difference(apron),paint)
+    separator=line.buffer(0.075,cap_style='flat')
+    if gate.name=='west':
+        separator=separator.difference(gate.gate.buffer(2.3))
+    drive_mark('yellow',separator)
+    # Paint lies along the driver's lane. The exit stop bar only spans the
+    # outbound half, behind the pedestrian crossing.
+    outbound=gate.routes['out']
+    crossings=outbound.intersection(apron.boundary)
+    near=min(outbound.project(p) for p in parts(crossings,'Point'))
+    d=max(0.2,near-0.85)
+    bar_distance=d
+    stop=outbound.interpolate(d)
+    tangent=outbound.interpolate(d+0.1)
+    prev=outbound.interpolate(d-0.1)
+    heading=math.atan2(tangent.y-prev.y,tangent.x-prev.x)
+    def symbol(poly,point,angle):
+        return shp.affinity.translate(shp.affinity.rotate(poly,angle,origin=(0,0),use_radians=True),point.x,point.y)
+    drive_mark('white',symbol(box(-0.18,-1.55,0.18,1.55),stop,heading))
+    # Drivers read the arrow before the stop bar. The outbound head points
+    # toward the outer through lane, with no markings across the public lane.
+    arrow=Polygon([(-1.5,-0.13),(0.35,-0.13),(0.35,-0.52),(1.55,0),
+                   (0.35,0.52),(0.35,0.13),(-1.5,0.13)])
+    for key in ('in','out'):
+        route=gate.routes[key]
+        d=route.length-1.7 if key=='in' else max(0.1,bar_distance-2.8)
+        point=route.interpolate(d)
+        pre,post=route.interpolate(d-0.25),route.interpolate(d+0.25)
+        drive_mark('white',symbol(arrow,point,math.atan2(post.y-pre.y,post.x-pre.x)))
+    # The two curved edge lines follow the actual radiused curb, then fade
+    # into the throat; the pedestrian route interrupts both edge lines.
+    edge=gate.drive.buffer(-0.27).boundary.intersection(gate.mouth.buffer(12))
+    edge=edge.difference(road.buffer(0.65)).difference(gate.island.buffer(0.5))
+    drive_mark('white',edge.buffer(0.065,cap_style='flat'))
 asphalt_y = lambda x,z: 0.075
 paint_y = lambda x,z: 0.089
-red = polygon(trace['redSurface']).intersection(road)
+red = polygon(trace['redSurface']).intersection(road).difference(shp.union_all([s.mask for s in frontages.values()]))
 public_surface('asphalt',road.difference(red),asphalt_y)
 public_surface('redAsphalt',red,asphalt_y)
 public_walls(road.boundary.difference(shp.union_all([g.area for g in gates]).buffer(0.02)),asphalt_y)
@@ -256,7 +295,7 @@ def walk_height(x,z):
     return 0.085+0.15*min(1,ramps.distance(Point(x,z))/1.4)
 
 for area,name in [(walk,'sidewalk'),(refuges,'refuge')]:
-    curb = area.intersection(area.boundary.buffer(0.23))
+    curb = area.intersection(area.boundary.buffer(0.23)).difference(shp.union_all([g.area.buffer(0.25) for g in gates]))
     # Introduce vertices at both ends of the ramp slope.
     for shape, material in [(area.difference(curb),name),(curb,'granite')]:
         for portion in (shape.intersection(ramps.buffer(1.4)),shape.difference(ramps.buffer(1.4))):
@@ -310,8 +349,18 @@ for i,(axis,one,lanes,width,kind) in enumerate(axes):
         middle=not one and n==lanes//2
         for line in parts(axis.offset_curve(offset).intersection(clear),'LineString'):
             (yellow if middle else white).append(stripe(line.coords,0.15,None if middle else (3,5)))
-public_surface('white',shp.union_all(white).intersection(road),paint_y)
-public_surface('yellow',shp.union_all(yellow).intersection(road),paint_y)
+frontage_mask=shp.union_all([s.mask for s in frontages.values()])
+paint_shapes={'white':[shp.union_all(white).difference(frontage_mask)],
+             'yellow':[shp.union_all(yellow).difference(frontage_mask)]}
+for gate in gates:
+    street=frontages[gate.name]
+    for color,line,dash in street.public_lines():
+        paint_shapes[color].append(stripe(line.coords,0.15,dash))
+    edge=street.curb.offset_curve(-0.22).difference(gate.drive.buffer(0.7))
+    for line in parts(edge,'LineString'):
+        paint_shapes['white'].append(stripe(line.coords,0.14))
+for color,shapes in paint_shapes.items():
+    public_surface(color,shp.union_all(shapes).intersection(road),paint_y)
 public_surface('blue',stripe(list(map(scene,trace['blueGuide'])),0.50).intersection(road),paint_y)
 
 # glTF 2.0, indexed geometry only. No imagery, textures or external URIs.
@@ -337,15 +386,23 @@ for name,(verts,_,indices) in batches.items():
     model['meshes'].append({'primitives':[{'attributes':{'POSITION':v},'indices':idx}]})
 model['scenes'][0]['extras']={'terrainFaces':removed,'gates':{
     g.name:{'mouth':list(g.mouth.coords[0]),'gate':list(g.gate.coords[0]),'end':list(g.end.coords[0]),
+            'turns':{k:list(v.coords) for k,v in g.routes.items()},
+            'gateHeading':g.gate_heading,
             'heading':g.heading,'axis':[list(p) for p in g.axis.coords],
             'drivePolygons':[[list(poly.exterior.coords),*[list(r.coords) for r in poly.interiors]]
                              for poly in parts(g.drive,'Polygon')]} for g in gates}}
 def rings(poly):
     return [list(poly.exterior.coords),*[list(r.coords) for r in poly.interiors]]
 extras=model['scenes'][0]['extras']
+extras['gates']['west']['fanWalls']=west.fan_walls
 extras['gates']['west']['grade']={**west.grade,'polygon':rings(graded)}
 extras['gates']['main']['garageAxis']=list(next(g for g in gates if g.name=='main').garage.coords)
 for g in gates:
+    street=frontages[g.name]
+    extras['gates'][g.name]['carriageway']={
+        'origin':street.origin.tolist(),'forward':street.forward.tolist(),'start':street.stations[0],
+        'edges':np.stack([street.lo,street.hi],axis=1).round(3).tolist(),
+        'tieIn':specs[g.name]['frontageSurvey']['tieIn'],'oneWay':g.name=='west'}
     extras['gates'][g.name]['frontagePolygons']=[rings(poly) for poly in parts(road.intersection(g.mouth.buffer(30)),'Polygon')]
 model['buffers']=[{'byteLength':len(blob)}]
 meta=json.dumps(model,separators=(',',':')).encode()

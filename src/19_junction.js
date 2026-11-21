@@ -25,6 +25,33 @@ function streetDeckY(x,z) {
   return y+0.075;
 }
 
+// Place through traffic on the same surveyed cross-sections as the paint.
+function frontageTrafficPose(x,z,dx,dz,laneOffset,dir) {
+  for (const gate of WORLD.frontages) {
+    const road=gate.carriageway,[tx,tz]=road.forward;
+    const mx=x-road.origin[0],mz=z-road.origin[1];
+    const s=mx*tx+mz*tz-road.start,k=Math.floor(s);
+    if (k<0 || k+1>=road.edges.length) continue;
+    const alignment=(dx*tx+dz*tz)*dir;
+    if (Math.abs(alignment)<0.83 || (road.oneWay && alignment<0)) continue;
+    const [a,b]=road.edges[k],[c,d]=road.edges[k+1];
+    const lateral=mz*tx-mx*tz, f=s-k;
+    if (lateral<lerp(a,c,f)-1.8 || lateral>lerp(b,d,f)+1.8) continue;
+    // Stable lane choice over the entire bend, including OSM way splits.
+    const outer=laneOffset*dir>2.2;
+    const frac=road.oneWay ? (laneOffset*dir>0 ? 0.75 : 0.25) :
+      alignment>0 ? (outer?0.90:0.70) : (outer?0.10:0.50);
+    const low=lerp(a,b,frac), high=lerp(c,d,frac);
+    const w=clamp(Math.min(s,road.edges.length-1-s)/road.tieIn,0,1);
+    const blend=w*w*(3-2*w), shift=blend*(lerp(low,high,f)-lateral);
+    // In the transition, blend the heading with the original path as well.
+    const sign=Math.sign(alignment)*dir, slope=high-low;
+    return [x-tz*shift,z+tx*shift,lerp(dx,sign*(tx-tz*slope),blend),
+            lerp(dz,sign*(tz+tx*slope),blend)];
+  }
+  return null;
+}
+
 function prepareStreets(group,nightMap) {
   // Base colours in linear space. All variation is evaluated in metres.
   const finishes={
@@ -37,6 +64,7 @@ function prepareStreets(group,nightMap) {
   };
   group.name='streets';
   WORLD.gates=group.userData.gates;
+  WORLD.frontages=Object.values(WORLD.gates);
   WORLD.entranceMeshes=[];
   const terrain=WORLD.terrain.geometry;
   const cut=new Set(group.userData.terrainFaces);

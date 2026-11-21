@@ -1,6 +1,7 @@
 // Check the geometry shipped to Pages without a WebGL context or Python dependencies.
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
+import vm from 'node:vm';
 const file=fs.readFileSync(new URL('../data/streets.glb',import.meta.url));
 assert.equal(file.readUInt32LE(0),0x46546c67);
 const jsonLength=file.readUInt32LE(12);
@@ -70,6 +71,72 @@ for (const [name,gate] of Object.entries(gates)) {
     }
   }
 }
+// Four approach movements, sampled with the rear axle as the reference.
+// Both bumpers and both sides of a 4.6 x 1.9 m car must clear the sidewalk.
+function overlap(a,b) {
+  const diff=[b.x-a.x,b.z-a.z];
+  for(const [dx,dz] of [[a.dx,a.dz],[-a.dz,a.dx],[b.dx,b.dz],[-b.dz,b.dx]]) {
+    const span=r=>r.long*Math.abs(dx*r.dx+dz*r.dz)+r.wide*Math.abs(dz*r.dx-dx*r.dz);
+    if(Math.abs(diff[0]*dx+diff[1]*dz)>=span(a)+span(b)) return false;
+  }
+  return true;
+}
+for (const [name,gate] of Object.entries(gates)) {
+  const footprints={in:[],out:[]};
+  for (const [direction,points] of Object.entries(gate.turns)) {
+    const route=name+' '+direction;
+    let turn=0,prev=null,lastLength=0;
+    for(let i=1;i<points.length;i++) {
+      const [ax,az]=points[i-1], [bx,bz]=points[i];
+      const len=Math.hypot(bx-ax,bz-az);
+      const dx=(bx-ax)/len,dz=(bz-az)/len;
+      if (prev) {
+        const delta=Math.atan2(prev[0]*dz-prev[1]*dx,prev[0]*dx+prev[1]*dz);
+        turn+=delta;
+        assert.ok(Math.abs(delta)<(len+lastLength)/(2*4.6),route+' steering radius below 4.6 m');
+      }
+      lastLength=len;
+      prev=[dx,dz];
+      for(let d=0;d<len;d+=0.6) {
+        footprints[direction].push({x:ax+(d+1.3)*dx,z:az+(d+1.3)*dz,dx,dz,long:2.3,wide:0.95});
+      }
+      for(let d=0;d<len;d+=0.6) for(const overhang of [-1,1.3,3.6]) for(const side of [-0.95,0.95]) {
+        const x=ax+(d+overhang)*dx-side*dz,z=az+(d+overhang)*dz+side*dx;
+        const deck=heights(base,x,z);
+        assert.ok(deck.length,route+' wheel or bumper leaves the paved surface at '+[x,z]);
+        const intrusions=heights(['granite','sidewalk','entranceWalk'],x,z);
+        assert.ok(intrusions.every(y=>y<=Math.max(...deck)+0.025),route+' curb in swept path at '+[x,z]);
+      }
+    }
+    assert.ok(turn>0.4 && turn<Math.PI,route+' must turn right');
+  }
+  assert.ok(!footprints.in.some(a=>footprints.out.some(b=>overlap(a,b))),name+' turning bodies overlap');
+  if(name==='west') {
+    const [x,z]=gate.gate;
+    const island={x,z,dx:Math.sin(gate.gateHeading),dz:-Math.cos(gate.gateHeading),long:2,wide:0.4};
+    const walls=gate.fanWalls.map(([[ax,az],[bx,bz]])=>{
+      const len=Math.hypot(bx-ax,bz-az);
+      return {x:(ax+bx)/2,z:(az+bz)/2,dx:(bx-ax)/len,dz:(bz-az)/len,long:len/2,wide:0.35};
+    });
+    assert.ok(walls.length>0);
+    const obstacles=[island,...walls];
+    assert.ok(![...footprints.in,...footprints.out].some(r=>obstacles.some(b=>overlap(r,b))),
+      'reader island or canopy wall blocks a turning car');
+  }
+}
+const ctx=vm.createContext({JUNCTION:{crosswalks:[]},WORLD:{frontages:Object.values(gates)},
+  lerp:(a,b,f)=>a+(b-a)*f,clamp:(v,a,b)=>Math.min(b,Math.max(a,v))});
+vm.runInContext(fs.readFileSync(new URL('../src/19_junction.js',import.meta.url),'utf8'),ctx);
+for(const [name,g] of Object.entries(gates)) {
+  const {origin:[x,z],forward:[dx,dz],edges,start}=g.carriageway;
+  const [lo,hi]=edges[-start],median=lo+(hi-lo)*0.60;
+  const pose=ctx.frontageTrafficPose(x,z,dx,dz,3,1);
+  const lateral=p=>-(p[0]-x)*dz+(p[1]-z)*dx;
+  assert.ok(lateral(pose)<hi-0.95 && lateral(pose)>(name==='main'?median:(lo+hi)/2));
+  const reverse=ctx.frontageTrafficPose(x,z,dx,dz,-3,-1);
+  if(name==='main') assert.ok(lateral(reverse)<median && lateral(reverse)>lo+0.95);
+  else assert.equal(reverse,null);
+}
 const ring=gates.main.axis.at(-1);
 // Follow the exit from the roundabout to the main garage portal.
 const garage=gates.main.garageAxis;
@@ -78,4 +145,4 @@ for(let i=0;i<64;i++){
   const a=i*Math.PI/32;
   assert.ok(heights(['mainDrive'],ring[0]+8*Math.cos(a),ring[1]+8*Math.sin(a)).length);
 }
-console.log('Checked elevation continuity and clear lanes from both public streets, the main roundabout and the west garage approach.');
+console.log('Checked four right-hand turns, sedan body clearance, steering radius, approach elevations and the main roundabout.');
