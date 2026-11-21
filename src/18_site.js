@@ -91,7 +91,7 @@ function roadDirection(pts, fallback) {
   return fallback ? 1 : 0;
 }
 
-// A fixed north-up plan keeps the camera bearing readable as the drone turns.
+// A fixed north-up plan keeps the camera bearing readable as the camera turns.
 function drawSiteMap(g,w,h,heading) {
   const f=W.frame, scale=Math.min(w/445,h/390);
   const screen=(x,z) => [w/2+(x*f.rE-z*f.nE-12)*scale,h/2-(x*f.rN-z*f.nN+24)*scale];
@@ -130,10 +130,6 @@ function drawSiteMap(g,w,h,heading) {
   g.fillStyle='#ffa34e'; g.fill(); g.strokeStyle='#192221'; g.lineWidth=1; g.stroke(); g.restore();
   g.fillStyle='#f0f3ee'; g.fillText('↑ N',w-16,10);
   g.fillRect(9,h-8,50*scale,1.5); g.fillText('50 m',9+25*scale,h-15);
-  drawMap.inv=(px,py) => {
-    const east=(px-w/2)/scale+12, north=(h/2-py)/scale-24;
-    return [east*f.rE+north*f.rN,-east*f.nE-north*f.nN];
-  };
 }
 
 // Equal-distance samples pair the opposing ramp axes even when OSM node counts differ.

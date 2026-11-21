@@ -63,7 +63,7 @@ const S = {
   doy: 311, hour: 15.5,                 // day of year (0-based, non-leap), local hour (KST)
   weather: 'clear',                     // clear | few | cloudy | rain | snow | dust
   lights: 'auto',                       // auto | on | off
-  room: 'living',
+  room: 'overview',
   playing: false,
 };
 const YEAR = 2029;                      // 입주 예정 연도 기준
