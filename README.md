@@ -41,4 +41,8 @@ src/를 고친 뒤 `python3 build.py` → `gwanggyo-view.html`. `python3 build.p
 
 시간·날씨 패널에서 ‘날짜’와 ‘시각’을 움직이면 주변 도로의 차량 수·속도와 정보과학고사거리 대기열이 바뀐다. ‘하루 재생’에서 시간에 따른 변화를 이어서 볼 수 있다.
 
-저장소 루트에서 `node tests/site.mjs`로 배치와 도로를, `node tests/traffic.mjs`로 시간대와 교차로 차량 동작을 검증한다.
+월드컵로에서 주출입구의 회전광장으로, 광교중앙로 지상 차로에서 부출입구의 지하주차장 램프로 이어진다. 도로, 보도, 연석과 노면 표시는 Three.js가 읽는 삼각형 메시다. [주출입구](https://geeksbaek.github.io/gwanggyo-view-threejs/?view=main-gate) · [부출입구](https://geeksbaek.github.io/gwanggyo-view-threejs/?view=west-gate) · [정보과학고사거리 보도 시점](https://geeksbaek.github.io/gwanggyo-view-threejs/?view=street)
+
+출입구의 기준점은 `data/entrances.json`, 교차로 외곽과 도색 좌표는 `data/junction.json`에 있다. 좌표나 도로 자료를 수정하면 NumPy와 Shapely 2.1 이상을 설치한 환경에서 `python3 pipeline/streets.py`로 `data/streets.glb`를 갱신한 뒤 `python3 build.py`를 실행한다.
+
+저장소 루트에서 `node tests/site.mjs`로 배치와 도로를, `node tests/traffic.mjs`로 시간대와 교차로 차량 동작을, `node tests/streets.mjs`로 배포용 메시의 출입구 단차와 차로 연결을 검증한다.

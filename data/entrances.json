@@ -1,0 +1,25 @@
+{
+  "main": {
+    "street": "월드컵로",
+    "frontage": [358,1190],
+    "gate": [370,1110],
+    "approach": [[368,1150],[370,1110],[378,1086]],
+    "width": 9.4,
+    "roundabout": [395,1060],
+    "outerRadius": 11.2,
+    "islandRadius": 5.55,
+    "garage": [[408,1075],[426,1080],[445,1090]]
+  },
+  "west": {
+    "street": "광교중앙로",
+    "frontage": [193,486],
+    "gate": [221.5,484],
+    "approach": [[207,485],[221.5,484],[245,483]],
+    "width": 8.9,
+    "fanCenter": [307,481],
+    "fanStart": [268,475],
+    "fanEnd": [329,422],
+    "fanRadius": 15,
+    "portalDepth": 7
+  }
+}
