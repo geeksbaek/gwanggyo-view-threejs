@@ -172,25 +172,9 @@ function paintDetail() {
   fillUV([[468, 224], [526, 178], [554, 212], [496, 250]], '#4f7a34', '#d2cdc1', 1.0); // 보타닉라운지
   fillUV([[524, 858], [568, 818], [596, 848], [552, 888]], '#8d6c49', '#d8d3c7', 0.8); // 킨포크라운지 timber deck
 
-  // 10) 주출입구 진입도로 + 원형 회전광장 (Roundabout) + 지하주차장 하강 램프 (1:1 with siteplan_fit.jpg & sp1_maingate.jpg!)
-  const entryDrive = [[358,1190],[370,1145],[381,1105],[395,1060]];
-  strokePlan(entryDrive,10.2,curb); strokePlan(entryDrive,9.4,'#383a40');
-  strokePlan(entryDrive,0.24,'#e0b83c');
-  const [rbX, rbZ] = P(...planPoint(395,1060));
-  g.beginPath(); g.arc(rbX, rbZ, 11.2 * k, 0, 7); g.fillStyle = '#383a40'; g.fill();
-  g.lineWidth = 1.6 * k; g.strokeStyle = curb; g.stroke();
-  g.beginPath(); g.arc(rbX, rbZ, 5.2 * k, 0, 7); g.fillStyle = '#568036'; g.fill();
-  g.lineWidth = 0.8 * k; g.strokeStyle = '#dfd9ce'; g.stroke();
-  // Underground parking ramp branching off roundabout toward 웰컴라운지/1709동!
-  const garage = [[402,1078],[426,1080],[446,1093]];
-  strokePlan(garage,7.8,'#34363a'); strokePlan(garage,0.25,'#e0b83c');
   // The southern drop-off is planned. Bay length and paint are schematic.
   const dropOff = [[341,1154],[347,1141],[357,1111],[366,1100]];
   strokePlan(dropOff,3.2,'#45484d');
-  const westDrive = [[207,490],[249,491],[272,479],[303,452],[331,440]];
-  strokePlan(westDrive,10.6,curb); strokePlan(westDrive,8.9,'#36383e');
-  strokePlan(westDrive,0.26,'#e0b83c');
-
   g.restore();
   const t = new THREE.CanvasTexture(c); t.colorSpace = THREE.SRGBColorSpace; t.flipY = false; t.anisotropy = 16; t.generateMipmaps = true; t.minFilter = THREE.LinearMipmapLinearFilter;
   return t;
@@ -224,7 +208,7 @@ function paintNightMap() {
 const TERRAIN_FS = /* glsl */`
 precision highp float;
 ${GLSL_COMMON}
-uniform sampler2D uSat, uSatInner, uDetail, uNightMap, uPaint, uJunction; uniform float uHalf, uIsFar, uDetH, uNearH, uPaintH, uInnerH;
+uniform sampler2D uSat, uSatInner, uDetail, uNightMap, uPaint; uniform float uHalf, uIsFar, uDetH, uNearH, uPaintH, uInnerH;
 varying vec3 vW; varying vec3 vN; varying vec2 vUv;
 void main(){
   if(uIsFar>0.5 && max(abs(vW.x),abs(vW.z))<uNearH-60.0) discard;
@@ -255,13 +239,7 @@ void main(){
   float isAsphalt=0.0;
   float g1=texture2D(uNoise,vW.xz*0.11).r, g2=texture2D(uNoise,vW.xz*1.7).g, g3=texture2D(uNoise,vW.xz*6.0).b;
 
-  // Restore the registered photo around the junction, including tree-lined
-  // shoulders, refuge islands and the red approach surface.
-  vec2 junctionUV=(vW.xz-vec2(30.0,-110.0))/vec2(230.0,220.0);
-  vec2 boundary=min(junctionUV,1.0-junctionUV)*vec2(230.0,220.0);
-  float edgeDist=min(boundary.x,boundary.y);
-  float neighborhood=(uInnerH>1.0) ? 1.0-smoothstep(520.0,720.0,length(vW.xz)) : 0.0;
-  float photoWeight=(1.0-uIsFar)*max(neighborhood,smoothstep(-32.0,-2.0,edgeDist));
+  float photoWeight=(1.0-uIsFar)*step(1.0,uInnerH)*(1.0-smoothstep(520.0,720.0,length(vW.xz)));
   // Crisp vector roads, sidewalks, crosswalks, park trails & sports pitches (RGBA roadpaint.png)
   if(uIsFar<0.5 && uPaintH>1.0){
     vec2 puv=(vW.xz+uPaintH)/(2.0*uPaintH);
@@ -313,13 +291,6 @@ void main(){
     }
   }
 
-  if(uIsFar<0.5 && edgeDist>0.0){
-    vec4 road=texture2D(uJunction,junctionUV);
-    float coverage=road.a*smoothstep(0.0,3.0,edgeDist);
-    alb=mix(alb,road.rgb*(0.92+0.12*g2),coverage);
-    veg*=1.0-coverage;
-    isAsphalt=max(isAsphalt,coverage);
-  }
   alb*=0.91+0.18*n2*smoothstep(900.0,60.0,d);
   float sn=uSnow*smoothstep(0.55,0.8,vN.y)*(0.82+0.18*n1);
   alb=mix(alb,vec3(0.86,0.89,0.94),sn*mix(0.95,0.72,veg));
@@ -351,7 +322,6 @@ void main(){
 }`;
 
 function buildTerrain(satN, satF, detail, nightMap, paint, satInner) {
-  const junction = junctionMarkings(satInner);
   const grp = new THREE.Group();
   const mk = (H, N, dem, seg, tex, far) => {
     const geo = new THREE.BufferGeometry(); const n = seg + 1, pos = new Float32Array(n * n * 3), uv = new Float32Array(n * n * 2), nor = new Float32Array(n * n * 3);
@@ -375,7 +345,7 @@ function buildTerrain(satN, satF, detail, nightMap, paint, satInner) {
     tex.flipY = false; tex.needsUpdate = true;
     const paintH = W.paintH || 640;
     const mat = new THREE.ShaderMaterial({
-      uniforms: { ...U, uSat: { value: tex }, uSatInner: { value: satInner || tex }, uInnerH: { value: satInner ? 900 : 0 }, uDetail: { value: detail }, uNightMap: { value: nightMap }, uHalf: { value: H }, uIsFar: { value: far ? 1 : 0 }, uDetH: { value: DET_H }, uJunction: { value: junction }, uPaint: { value: paint || detail }, uPaintH: { value: paint ? paintH : 0 }, uNearH: { value: W.HN } },
+      uniforms: { ...U, uSat: { value: tex }, uSatInner: { value: satInner || tex }, uInnerH: { value: satInner ? 900 : 0 }, uDetail: { value: detail }, uNightMap: { value: nightMap }, uHalf: { value: H }, uIsFar: { value: far ? 1 : 0 }, uDetH: { value: DET_H }, uPaint: { value: paint || detail }, uPaintH: { value: paint ? paintH : 0 }, uNearH: { value: W.HN } },
       vertexShader: `varying vec3 vW; varying vec3 vN; varying vec2 vUv; void main(){ vW=position; vN=normal; vUv=uv; gl_Position=projectionMatrix*viewMatrix*vec4(position,1.0); }`,
       fragmentShader: TERRAIN_FS,
     });
@@ -1086,6 +1056,7 @@ function buildTrees() {
   const trunks = []; // x, y, z, s, kind for grounded 3D trunks on near & mid trees!
   for (let i = 0; i < N; i++) {
     const x = xy[i * 2] / 4, z = xy[i * 2 + 1] / 4, d = Math.hypot(x, z + 40); const con = tk[i] === 1;
+    if (onEntranceDrive(x,z,true)) continue;
     const key = (d < 200 ? 'nr' : d < 450 ? 'hi' : 'lo') + (con ? 'C' : 'B');
     if (d > 1250 && (i % 3) === 0) continue;
     const r = ((i * 2654435761) >>> 0) / 4294967296;
@@ -1093,6 +1064,14 @@ function buildTrees() {
     const y = ty[i] / 10;
     sets[key].push(x, y, z, sc, tk[i], r);
     if (d < 440) trunks.push(x, y, z, sc, con ? 1 : 0, r);
+  }
+  // Street tree crowns registered on both sidewalks of the east approach.
+  for (const [i,[u,v]] of JUNCTION.streetTrees.entries()) {
+    const x=30+u/5,z=-110+v/5,y=streetDeckY(x,z)+0.16;
+    if (sets.nrB.some((n,j,p)=>j%6===0 && Math.hypot(n-x,p[j+2]-z)<2.5)) continue;
+    const seed=(i*0.61803)%1, radius=2.3+0.48*seed;
+    sets.nrB.push(x,y,z,radius,0,seed);
+    trunks.push(x,y,z,radius,0,seed);
   }
   // Rows of crown symbols along Blossom Garden, the eastern walk and the road frontage.
   // Flowering and broadleaf forms approximate the plan; crown sizes are illustrative.
@@ -1112,7 +1091,7 @@ function buildTrees() {
       const intervals=Math.max(1,Math.round(Math.hypot(b[0]-a[0],b[1]-a[1])/6.5));
       for (let k=0; k<intervals; k++) {
         const x=lerp(a[0],b[0],k/intervals), z=lerp(a[1],b[1],k/intervals);
-        if (!pip(x,z,W.site) || W.towers.some(t=>pip(x,z,t.p))) continue;
+        if (onEntranceDrive(x,z,true) || !pip(x,z,W.site) || W.towers.some(t=>pip(x,z,t.p))) continue;
         if (sets.nrB.some((v,j,list)=>j%6===0 && Math.hypot(v-x,list[j+2]-z)<3.8)) continue;
         const seed=(Math.sin(x*2+z)*1973)%1+1, r=seed%1, size=2.0+0.7*r, y=groundY(x,z);
         sets.nrB.push(x,y,z,size,kind,r); trunks.push(x,y,z,size,0,r);
@@ -1227,6 +1206,7 @@ function buildLamps() {
   const localWays = [...NEIGHBORHOOD.roads,...NEIGHBORHOOD.otherWays];
   for (const lamp of mapped) {
     const [x,z]=lamp.p, y=groundY(x,z);
+    if (onEntranceDrive(x,z,true)) continue;
     const nearest=nearestStreet(x,z,localWays);
     // Only the position and mounting type are mapped. Aim the modeled head toward the road.
     const angle=nearest ? Math.atan2(z-nearest.pz,nearest.px-x) : 0;
@@ -1248,7 +1228,7 @@ function buildLamps() {
         const x = x0 + ux * acc - uz * sd * (w / 2 + 1.1), z = z0 + uz * acc + ux * sd * (w / 2 + 1.1);
         const mappedNearby = Math.abs(x)<580 && Math.abs(z)<580 &&
           mapped.some(f => Math.abs(f.p[0]-x)<20 && Math.hypot(f.p[0]-x,f.p[1]-z)<20);
-        if (Math.abs(x) < 7900 && Math.abs(z) < 7900 && !mappedNearby && !withinJunctionRoad(x,z)) {
+        if (Math.abs(x) < 7900 && Math.abs(z) < 7900 && !mappedNearby && !withinJunctionRoad(x,z) && !onEntranceDrive(x,z,true)) {
           const gy = groundY(x, z), lh = c >= 2 ? 9.2 : 6.4;
           pos.push(x, gy + lh, z); seed.push(((i * 31 + v) * 0.6180339) % 1, c);
           if (Math.hypot(x, z) < 520 && c >= 2 && Math.hypot(x - 110, z + 132) > 14 && Math.hypot(x - 28, z - 52) > 12) WORLD.poleSpots.push([x, gy, z, Math.atan2(-uz * sd, ux * sd), lh]);
@@ -1345,7 +1325,12 @@ function buildCars() {
   }
   cab.computeVertexNormals();
   cab.translate(0,1.21,-0.12);
-  const geo = mergeGeometries([body, cab]);
+  const axle=new THREE.CylinderGeometry(0.33,0.33,1.89,12);
+  axle.rotateZ(Math.PI/2);
+  const front=axle.clone(), rear=axle.clone();
+  front.translate(0,0.33,1.40);
+  rear.translate(0,0.33,-1.40);
+  const geo = mergeGeometries([body,cab,front,rear]);
   const pal = [0xf2f2ef, 0x16181c, 0x7e8288, 0xe2e4e6, 0x2c323b, 0x6e1a1a, 0x1e3552, 0xb8b2a6].map(c => new THREE.Color(c));
   const mat = new THREE.ShaderMaterial({
     uniforms: { ...U },
@@ -1357,6 +1342,9 @@ function buildCars() {
         float isCab=step(0.97,vP.y)*(1.0-step(0.96,n.y));
         isCab*=smoothstep(0.04,0.09,abs(vP.z+0.12));
         vec3 alb=mix(vC, vec3(0.03,0.04,0.055), isCab);
+        float wheel=step(0.932,abs(vP.x))*step(vP.y,0.67);
+        float hub=1.0-smoothstep(0.15,0.18,length(vec2(abs(vP.z)-1.40,vP.y-0.33)));
+        alb=mix(alb,mix(vec3(0.018),vec3(0.19),hub),wheel);
         float sh=shadowAt(vW,0.002);
         vec3 col=lit(alb,n,sh,1.0);
         // Glossy car clearcoat / windshield sky reflection
@@ -1375,6 +1363,7 @@ function buildCars() {
   pm.vertexShader = pm.vertexShader.replace('vec3 stCol=mix(vec3(1.0,0.62,0.26),vec3(0.96,0.94,0.88),step(0.55,aS.x));', 'vec3 stCol=mix(vec3(1.0,0.06,0.03)*0.45,vec3(1.0,0.96,0.88)*1.5,aS.x);').replace('220.0', '150.0');
   const pts = new THREE.Points(pg, pm); pts.frustumCulled = false;
   const M = new THREE.Matrix4(), q = new THREE.Quaternion(), up = new THREE.Vector3(0, 1, 0), pos = new THREE.Vector3(), one = new THREE.Vector3(1, 1, 1), cam = new THREE.Vector3();
+  const slope=new THREE.Vector3(), right=new THREE.Vector3(), forward=new THREE.Vector3();
   WORLD.updateCars = (dt, camera, demand) => {
     junction.update(dt,S.doy,S.hour,S.playing,demand);
     for (const lane of junction.lanes) {
@@ -1395,8 +1384,18 @@ function buildCars() {
       const a = p.pts[k - 1], b = p.pts[k], f = (c.t - a[2]) / Math.max(b[2] - a[2], 0.01); const dx = b[0] - a[0], dz = b[1] - a[1], L = Math.hypot(dx, dz) || 1;
       const nx = -dz / L, nz = dx / L;
       const x = lerp(a[0], b[0], f) + nx * c.laneOff, z = lerp(a[1], b[1], f) + nz * c.laneOff;
-      const y = active && (c.local || !withinJunctionRoad(x,z)) ? groundY(x, z) : -500;
-      pos.set(x, y, z); q.setFromAxisAngle(up, Math.atan2(dx * c.dir, dz * c.dir)); M.compose(pos, q, one); m.setMatrixAt(i, M);
+      const y = active && (c.local || !withinJunctionRoad(x,z)) ? (Math.hypot(x,z)<550 ? streetDeckY(x,z) : groundY(x,z)) : -500;
+      pos.set(x,y,z);
+      if (c.local && active) {
+        slope.set(streetDeckY(x-1,z)-streetDeckY(x+1,z),2,streetDeckY(x,z-1)-streetDeckY(x,z+1)).normalize();
+        forward.set(dx*c.dir,0,dz*c.dir);
+        right.crossVectors(slope,forward).normalize();
+        forward.crossVectors(right,slope);
+        q.setFromRotationMatrix(M.makeBasis(right,slope,forward));
+      } else {
+        q.setFromAxisAngle(up,Math.atan2(dx*c.dir,dz*c.dir));
+      }
+      M.compose(pos,q,one); m.setMatrixAt(i,M);
       P[i * 3] = x; P[i * 3 + 1] = y + 0.72; P[i * 3 + 2] = z;
       A[i * 2] = ((cam.x - x) * dx + (cam.z - z) * dz) * c.dir > 0 ? 1 : 0;
     }

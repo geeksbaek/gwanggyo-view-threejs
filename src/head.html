@@ -52,7 +52,7 @@ input[type=range]::-moz-range-thumb{width:18px;height:18px;border-radius:50%;bac
 .grp{display:flex;gap:8px;align-items:center;min-width:0}
 .grp>span{flex:none;font-size:12px;color:var(--dim);width:34px}
 .cols{display:flex;gap:8px 18px;flex-wrap:wrap}
-#roomsbar{display:flex;justify-content:flex-end;gap:6px;align-items:flex-end;max-width:920px;width:100%;margin:0 auto}
+#roomsbar{display:flex;flex-wrap:wrap;justify-content:flex-end;gap:6px;align-items:flex-end;max-width:920px;width:100%;margin:0 auto}
 #hud.min .panel{display:none}
 #load{position:absolute;inset:0;background:var(--bg);display:flex;flex-direction:column;align-items:center;justify-content:center;gap:14px;transition:opacity .8s;z-index:5;padding:0 24px;text-align:center}
 #load.done{opacity:0;pointer-events:none}
@@ -75,6 +75,7 @@ input[type=range]::-moz-range-thumb{width:18px;height:18px;border-radius:50%;bac
       <p>84B · 17층 · 남동향 · 2029년 10월 입주 예정</p>
       <p>원천동 633 · 9개 동 600세대 · 분양계획 기준 조망</p>
       <p><a style="color:inherit" href="https://www.openstreetmap.org/copyright" target="_blank" rel="noopener">도로·정류장 © OpenStreetMap 기여자</a></p>
+      <p><button type="button" class="btn" data-gate-view="main-gate">주출입구 보기</button> <button type="button" class="btn" data-gate-view="west-gate">부출입구 보기</button></p>
       <dl id="info">
         <dt>일출·일몰</dt><dd><span id="i-rise">–</span> · <span id="i-set">–</span></dd>
         <dt>모의 교통량</dt><dd id="i-traffic">–</dd>
@@ -94,7 +95,7 @@ input[type=range]::-moz-range-thumb{width:18px;height:18px;border-radius:50%;bac
         <div class="grp"><span>조명</span><div class="chips" id="lights"></div></div>
       </div>
     </div>
-    <div id="roomsbar"><button class="btn" id="hide" type="button" aria-pressed="false">시간·날씨</button><button class="btn" id="drone" type="button" aria-pressed="false">단지 전경</button><button class="btn" id="orbit" type="button" aria-pressed="false" hidden>자동 회전</button><button class="btn" id="clean" type="button">가리기</button><button class="btn" id="fs" type="button" aria-pressed="false">전체화면</button><button class="btn" id="bgm" type="button" aria-pressed="false">음악</button><a class="btn" id="bgmsrc" href="https://youtu.be/z13_ZlsAlYQ" target="_blank" rel="noopener" style="text-decoration:none">원곡 열기</a></div>
+    <div id="roomsbar"><button class="btn" id="hide" type="button" aria-pressed="false">시간·날씨</button><button class="btn" id="drone" type="button" aria-pressed="false">단지 전경</button><button class="btn" id="street" type="button">교차로</button><button class="btn" id="orbit" type="button" aria-pressed="false" hidden>자동 회전</button><button class="btn" id="clean" type="button">가리기</button><button class="btn" id="fs" type="button" aria-pressed="false">전체화면</button><button class="btn" id="bgm" type="button" aria-pressed="false">음악</button><a class="btn" id="bgmsrc" href="https://youtu.be/z13_ZlsAlYQ" target="_blank" rel="noopener" style="text-decoration:none">원곡 열기</a></div>
   </div>
   <div id="stick" aria-hidden="true"><i></i></div>
   <div id="toast" hidden></div>

@@ -194,12 +194,33 @@ function drawMap() {
     g.fillStyle = '#f3b765'; g.strokeStyle = '#1d1406'; g.lineWidth = 1; g.beginPath(); g.arc(px, py, 3.6, 0, 6.2832); g.fill(); g.stroke(); }
 }
 function goView(name, instant) {
-  S.room = name; const v = VIEWS[name]; view.drone = name === 'drone';
+  const street=name==='street';
+  const gate=name==='main-gate' ? WORLD.gates.main : name==='west-gate' ? WORLD.gates.west : null;
+  view.drone=!!gate || street || name==='drone';
+  if (!view.drone && !VIEWS[name]) name='living';
+  S.room=name; const v=VIEWS[name];
   if (!view.drone) { view.tpos.set(v.p[0], FY + EYE, v.p[1]); view.tyaw = v.yaw; view.tpitch = v.pitch; view.tfov = 62; if (instant) { view.pos.copy(view.tpos); view.yaw = view.tyaw; view.pitch = view.tpitch; } }
   else { // free-flying drone: start on the old orbit, looking at the complex (owner 2026-11-17: fly it yourself, no auto-rotation)
     const c = [0, FY * 0.7, -25]; view.tpos.set(c[0] + Math.sin(view.dAz) * Math.cos(view.dEl) * view.dDist, c[1] + Math.sin(view.dEl) * view.dDist, c[2] - Math.cos(view.dAz) * Math.cos(view.dEl) * view.dDist);
     const dx = c[0] - view.tpos.x, dy = c[1] - view.tpos.y, dz = c[2] - view.tpos.z; view.tyaw = Math.atan2(dx, -dz); view.tpitch = Math.atan2(dy, Math.hypot(dx, dz)); view.tfov = 55;
     view.pos.copy(view.tpos); view.yaw = view.tyaw; view.pitch = view.tpitch; view.fov = 55; if (!SHOT && !view.flown) { view.flown = 1; const el = $('toast'); if (el) { el.textContent = matchMedia('(pointer:coarse)').matches ? '끌어서 둘러보고, 왼쪽 패드로 보는 방향으로 날아갑니다' : '끌어서 둘러보기 · WASD 비행 · Q/E 내려가기/올라가기 · Shift 빠르게'; el.hidden = false; setTimeout(() => { el.hidden = true; }, 5000); } } }
+  if (street) {
+    view.orbit=false;
+    // Look west from the sidewalk along the arm with the two crossings.
+    view.tpos.set(176,streetDeckY(176,-30.7)+2.15,-30.7);
+    view.tyaw=-2.11; view.tpitch=-0.055; view.tfov=65;
+    view.pos.copy(view.tpos); view.yaw=view.tyaw; view.pitch=view.tpitch; view.fov=view.tfov;
+  }
+  if (gate) {
+    view.orbit=false;
+    const [x,z]=gate.mouth, dx=Math.sin(gate.heading), dz=-Math.cos(gate.heading);
+    const lateral=name==='west-gate'?4:7;
+    const px=x-13*dx+lateral*dz, pz=z-13*dz-lateral*dx;
+    view.tpos.set(px,entranceFloor(x,z)+6.2,pz);
+    const vx=gate.gate[0]-px,vz=gate.gate[1]-pz;
+    view.tyaw=Math.atan2(vx,-vz); view.tpitch=-0.20; view.tfov=63;
+    view.pos.copy(view.tpos); view.yaw=view.tyaw; view.pitch=view.tpitch; view.fov=view.tfov;
+  }
   { const db = $('drone'); if (db) { db.setAttribute('aria-pressed', view.drone); db.textContent = view.drone ? '집 안으로' : '단지 전경'; } const ob = $('orbit'); if (ob) { ob.hidden = !view.drone; ob.setAttribute('aria-pressed', !!view.orbit); } $('stick').classList.toggle('off', !!(view.drone && view.orbit)); }
   $('mapcredit').hidden = !view.drone;
   $('map').setAttribute('aria-label',view.drone ? '북쪽 기준 단지와 주변 도로 배치도. 눌러서 상공으로 이동' : '평면도. 눌러서 이동');
@@ -219,6 +240,9 @@ function setupUI() {
   $('hide').onclick = () => { const h = $('hud').classList.toggle('min'); $('hide').setAttribute('aria-pressed', !h); };
   $('title').onclick = () => { const f = $('facts'); f.hidden = !f.hidden; $('title').setAttribute('aria-expanded', !f.hidden); };
   $('orbit').onclick = () => { if (!view.orbit) { const c = [0, FY * 0.7, -25], dx = view.pos.x - c[0], dy = view.pos.y - c[1], dz = view.pos.z - c[2]; view.dDist = clamp(Math.hypot(dx, dy, dz), 60, 600); view.dAz = Math.atan2(dx, -dz); view.dEl = clamp(Math.asin(clamp(dy / Math.hypot(dx, dy, dz), -1, 1)), 0.03, 1.4); view.orbit = true; view.flown = 1; goView('drone', true); } else { view.orbit = false; goView('drone', true); } };
+  for (const button of document.querySelectorAll('[data-gate-view]'))
+    button.onclick=()=>{goView(button.dataset.gateView,true); $('facts').hidden=true; $('title').setAttribute('aria-expanded',false);};
+  $('street').onclick = () => goView('street',true);
   $('drone').onclick = () => goView(view.drone ? 'living' : 'drone', true);
   { const mp = $('map'); const go = (e) => { if (!drawMap.inv) return; const r = mp.getBoundingClientRect(), [x, z] = drawMap.inv(e.clientX - r.left, e.clientY - r.top); let best = null;
       if (view.drone) {
@@ -323,13 +347,14 @@ function tick(dt) {
   const pc = precip.material.uniforms.uCol.value, sk = U.uSkyHor.value; pc.setRGB(sk.r * 2.2 + 2e-4, sk.g * 2.2 + 2e-4, sk.b * 2.3 + 2e-4);
   // camera
   const k = view.keys || {}, sp = 2.2 * dt;
-  if (view.drone && !SHOT && !view.orbit) {
+  if (view.drone && (!SHOT || S.room==='street' || S.room.endsWith('-gate')) && !view.orbit) {
     const J = view.joy || [0, 0], run = k.ShiftLeft || k.ShiftRight ? 3.5 : 1;
     const f = (k.KeyW ? 1 : 0) - (k.KeyS ? 1 : 0) - J[1], r = (k.KeyD ? 1 : 0) - (k.KeyA ? 1 : 0) + J[0], up = (k.KeyE ? 1 : 0) - (k.KeyQ ? 1 : 0), turn = (k.ArrowRight ? 1 : 0) - (k.ArrowLeft ? 1 : 0), tilt = (k.ArrowUp ? 1 : 0) - (k.ArrowDown ? 1 : 0);
     if (turn) view.tyaw += turn * 1.4 * dt; if (tilt) view.tpitch = clamp(view.tpitch + tilt * 1.0 * dt, -1.5, 1.5);
     if (f || r || up) { const cp = Math.cos(view.pitch), fx = Math.sin(view.yaw) * cp, fy = Math.sin(view.pitch), fz = -Math.cos(view.yaw) * cp, rx = Math.cos(view.yaw), rz = Math.sin(view.yaw), st = 26 * run * dt;
       view.tpos.x = clamp(view.tpos.x + (fx * f + rx * r) * st, -2500, 2500); view.tpos.z = clamp(view.tpos.z + (fz * f + rz * r) * st, -2500, 2500); view.tpos.y += (fy * f + up) * st; }
     let gy = 0; for (const h of WORLD.hFns || []) if (Math.abs(view.tpos.x) < h.H && Math.abs(view.tpos.z) < h.H) { gy = h.hAt(view.tpos.x, view.tpos.z); break; }
+    if (onEntranceDrive(view.tpos.x,view.tpos.z)) gy=entranceFloor(view.tpos.x,view.tpos.z);
     view.tpos.y = clamp(view.tpos.y, gy + 2, 900);
     const e = 1 - Math.exp(-dt * 6);
     view.pos.lerp(view.tpos, e); view.yaw += (view.tyaw - view.yaw) * e; view.pitch += (view.tpitch - view.pitch) * e; view.fov += (view.tfov - view.fov) * e;
@@ -357,7 +382,7 @@ function tick(dt) {
     const near = !view.drone && Math.hypot(view.pos.x - d.cx, view.pos.z - d.cz) < (d.t > 0.01 ? 1.9 : 1.45), want = near ? 1 : 0;
     const ds = Math.max(dt, 0) * 1.5; d.t = SHOT ? want : clamp(d.t + clamp(want - d.t, -ds, ds), 0, 1); const e = d.t * d.t * (3 - 2 * d.t);
     if (d.rot !== undefined) d.mesh.rotation.y = d.rot * e; else d.mesh.position.set(d.px + d.sx * e, 0, d.pz + d.sz * e); }
-  { const rl = view.drone ? '단지 전경' : (roomAt(view.pos.x, view.pos.z) || '집'); if (rl !== view.rl) { view.rl = rl; $('roomLab').textContent = rl; } drawMap(); }
+  { const rl = view.drone ? (S.room==='street' ? '교차로' : S.room==='main-gate' ? '주출입구' : S.room==='west-gate' ? '부출입구' : '단지 전경') : (roomAt(view.pos.x, view.pos.z) || '집'); if (rl !== view.rl) { view.rl = rl; $('roomLab').textContent = rl; } drawMap(); }
   WORLD.updateCars(dt, cam, trafficDemand(S.doy,S.hour));
   if (SHADOW.dirty) { renderShadow(renderer); SHADOW.dirty = false; }
   // exposure adaptation + interior balance
@@ -374,13 +399,15 @@ async function boot() {
   const prog = (p, t) => { $('bar').style.width = Math.round(p * 100) + '%'; if (t) $('loadmsg').textContent = t; };
   prog(0.05, '지형과 도시 자료를 불러오는 중');
   await loadWorld(); W.site = SITE_OUTLINE.map(p=>planPoint(...p)); demN = arr('dem_n'); demF = arr('dem_f'); U.uHF.value = W.HF;
-  const [satN, satF, paint, satIn] = await Promise.all([loadTex('sat_near.jpg'), loadTex('sat_far.jpg'), loadTex('roadpaint.png', true).catch(() => null), loadTex('sat_inner.jpg').catch(() => null)]); HAS_PAINT = !!paint; if (paint) { paint.flipY = false; paint.needsUpdate = true; paint.generateMipmaps = true; paint.minFilter = THREE.LinearMipmapLinearFilter; paint.anisotropy = 16; } if (satIn) { satIn.flipY = false; satIn.needsUpdate = true; } prog(0.45, '지형을 세우는 중');
+  const [satN, satF, paint, satIn, streets] = await Promise.all([loadTex('sat_near.jpg'), loadTex('sat_far.jpg'), loadTex('roadpaint.png', true).catch(() => null), loadTex('sat_inner.jpg').catch(() => null),new GLTFLoader().loadAsync('data/streets.glb')]); HAS_PAINT = !!paint; if (paint) { paint.flipY = false; paint.needsUpdate = true; paint.generateMipmaps = true; paint.minFilter = THREE.LinearMipmapLinearFilter; paint.anisotropy = 16; } if (satIn) { satIn.flipY = false; satIn.needsUpdate = true; } prog(0.45, '지형을 세우는 중');
   U.uNoise.value = makeNoiseTex(256);
   cam = new THREE.PerspectiveCamera(62, w / h, 0.05, 160000); cam.rotation.order = 'YXZ';
   extScene = new THREE.Scene(); homeScene = new THREE.Scene();
   extScene.add(initSky(renderer)); initShadow(); POST.msaa = !QS.has('nomsaa'); initPost(renderer, Math.round(w * dpr), Math.round(h * dpr));
   await new Promise(r => setTimeout(r, 20));
-  extScene.add(buildTerrain(satN, satF, paintDetail(), paintNightMap(), paint, satIn)); prog(0.6, '건물 1만 9천 동을 올리는 중'); await new Promise(r => setTimeout(r, 20));
+  const nightMap=paintNightMap();
+  extScene.add(buildTerrain(satN, satF, paintDetail(), nightMap, paint, satIn));
+  extScene.add(prepareStreets(streets.scene,nightMap)); prog(0.6, '건물 1만 9천 동을 올리는 중'); await new Promise(r => setTimeout(r, 20));
   extScene.add(buildCity()); extScene.add(buildTowers()); extScene.add(buildComplexFeatures()); initPick(); prog(0.75, '나무와 주변 환경을 꾸미는 중'); await new Promise(r => setTimeout(r, 20));
   extScene.add(buildTrees()); extScene.add(buildWater()); extScene.add(buildLamps()); extScene.add(buildWorldProps()); extScene.add(buildCars());
   precip = buildPrecip(); extScene.add(precip);
@@ -398,7 +425,6 @@ async function boot() {
   Object.assign(WX, WEATHER[S.weather]); updateEnv(); ENV.exp = ENV.expTarget;
   prog(1, ''); $('load').classList.add('done'); if (SHOT) $('load').hidden = true; else setTimeout(() => { $('load').hidden = true; }, 900);
   window.__doors = HOME.doors; window.__gg = { S, view, ENV, WX, goView, frame: (n = 1, dt = 0.016) => { for (let i = 0; i < n; i++) tick(dt); }, set: (o) => { Object.assign(S, o); if (o.weather) Object.assign(WX, WEATHER[o.weather]); ENV.dirty = true; }, info: () => ({ tris: renderer.info.render.triangles, calls: renderer.info.render.calls, trees: WORLD.treeTris }) };
-  loadJunctionPhoto(WORLD.terrain.material.uniforms.uJunction.value,W.frame);
   if (SHOT) return;
   let last = performance.now();
   // keep it fluid on slower GPUs: step the render resolution down while frames stay long

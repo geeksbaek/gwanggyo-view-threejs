@@ -388,7 +388,7 @@ function buildComplexFeatures() {
   {
     // Frame spans left monolith U2S(294,968) -> right pier U2S(364,988) along the southern 32 m frontage!
     // Check outward normal (+lz = rx,rz): dx = -13.56, dz = -19.29 -> rx = +0.818, rz = -0.575 (faces straight out toward 32M 도로!)
-    const G = mkFrame(338,1104,424,1120,null,planPoint);
+    const G = mkFrame(338,1104,424,1120,entranceFloor(...WORLD.gates.main.gate),planPoint);
     const faceOut = Math.atan2(G.rx, G.rz);
     const W = G.L; // ~23.6m exact span!
     const hL = 8.1, hR = 5.5; // iconic asymmetric sloping silhouette from sp1_maingate.jpg!
@@ -454,7 +454,7 @@ function buildComplexFeatures() {
     G.box(OP, kx, 1.98, kz + 1.88, 5.3, 0.08, 0.10, C_METAL, M_METAL);
 
     // 원형 회전광장 (Circular Roundabout Center Planter Island at exact U2S(338, 932) — sp1_maingate.jpg & siteplan_fit.jpg!)
-    const [rbx, rbz] = planPoint(395,1060), rby = Math.max(groundY(rbx, rbz), -0.45);
+    const [rbx, rbz] = planPoint(395,1060), rby = entranceFloor(rbx+7,rbz);
     OP.cyl(rbx, rby + 0.24, rbz, 5.35, 5.55, 0.48, 28, C_GRAN, M_STONE);
     OP.cyl(rbx, rby + 0.56, rbz, 4.95, 5.15, 0.34, 28, C_HEDGE, M_STONE);
     for (let k = 0; k < 12; k++) {
@@ -466,7 +466,7 @@ function buildComplexFeatures() {
   // ── 5. 주출입 지하주차장 포털 + 석가산 2단 폭포 + 상단 연못 & 화이트 티하우스 데크 (1:1 match to sp3_connect.jpg!)
   {
     // 5A) Fluted Silver-Grey CENTREVILLE Underground Parking Portal facing straight onto roundabout U2S(338, 932)!
-    const P = mkFrame(430,1107,460,1074,-0.25,planPoint);
+    const P = mkFrame(430,1107,460,1074,entranceFloor(...planPoint(442,1089)),planPoint);
     const [rbx, rbz] = planPoint(395,1060);
     const outSgn = ((rbx - P.mx) * P.rx + (rbz - P.mz) * P.rz) >= 0 ? 1 : -1;
     const ptP = (lx, ly, lz) => P.pt(lx, ly, lz * outSgn);
@@ -569,8 +569,8 @@ function buildComplexFeatures() {
 
   // ── 6. Streetfront B1F Community & Commercial Pavilions (1:1 from siteplan_fit.jpg!)
   {
-    const addStreetPav = (u0, v0, u1, v1, depth, h, hasFluted = true) => {
-      const F = mkFrame(u0, v0, u1, v1);
+    const addStreetPav = (u0, v0, u1, v1, depth, h, hasFluted = true, project = U2S) => {
+      const F = mkFrame(u0, v0, u1, v1,null,project);
       const base = Math.min(F.y0, -0.6);
       const bh = Math.max(h, 0.1 - base + 3.8);
       const yMid = base + bh * 0.5;
@@ -582,8 +582,8 @@ function buildComplexFeatures() {
       F.box(GL, 0, yMid - F.y0 - 0.1, -depth * 0.51, F.L - 1.0, bh * 0.74, 0.16, C_SHOPG, M_SHOP);
       F.box(OP, 0, base + bh - F.y0 - 0.08, depth * 0.54, F.L - 1.0, 0.10, 0.18, C_LED, M_LED);
     };
-    addStreetPav(372, 982, 424, 996, 7.6, 4.4, true);  // 근린생활시설(B1F) right of main gate (sp1_maingate far right!)
-    addStreetPav(260, 938, 304, 962, 7.4, 4.3, true);  // 키즈&맘스라운지(B1F) left of main gate (sp3_connect far left!)
+    addStreetPav(420,1121,478,1133,7.6,4.4,true,planPoint);  // 근린생활시설(B1F) right of main gate (sp1_maingate far right!)
+    addStreetPav(260,1064,332,1090,7.4,4.3,true,planPoint);  // 키즈&맘스라운지(B1F) left of main gate (sp3_connect far left!)
     addStreetPav(168, 848, 214, 904, 7.8, 4.5, false); // 센트레 라이브러리 / 다 함께 돌봄센터(B1F)
     addStreetPav(192, 738, 216, 804, 8.2, 5.2, true);  // 센트웰 듀플렉스 피트니스 / 스크린 골프(B1/B2F)
   }
@@ -598,6 +598,20 @@ function buildComplexFeatures() {
     for (const run of terraceUVs) {
       for (let i = 0; i < run.length - 1; i++) {
         const [x0, z0] = U2S(...run[i]), [x1, z1] = U2S(...run[i + 1]);
+        const slices=Math.ceil(Math.hypot(x1-x0,z1-z0));
+        let first=null;
+        for (let n=0;n<=slices;n++) {
+          const f=Math.min(1,(n+0.5)/slices), px=lerp(x0,x1,f), pz=lerp(z0,z1,f);
+          const blocked=n===slices || [-3,-1.5,0,1.5,3].some(ox=>[-3,0,3].some(oz=>onEntranceDrive(px+ox,pz+oz)));
+          if (!blocked && first===null) first=n/slices;
+          if (!blocked || first===null) continue;
+          const a=first,b=n/slices;
+          first=null;
+          addTerrace(lerp(x0,x1,a),lerp(z0,z1,a),lerp(x0,x1,b),lerp(z0,z1,b),run!==terraceUVs[2]);
+        }
+      }
+    }
+    function addTerrace(x0,z0,x1,z1,withScreen) {
         const dx = x1 - x0, dz = z1 - z0, L = Math.hypot(dx, dz), ang = Math.atan2(-dz, dx);
         const mx = (x0 + x1) * 0.5, mz = (z0 + z1) * 0.5;
         let ix = dz / L, iz = -dx / L;
@@ -610,7 +624,7 @@ function buildComplexFeatures() {
         OP.box(mx + ix * 2.5, 0.12, mz + iz * 2.5, L + 0.5, 0.20, 1.3, ang, C_WHITE, M_STONE);
         GL.box(mx + ix * 2.5, 0.75, mz + iz * 2.5, L, 1.1, 0.08, ang, C_GLASS, M_GLASS);
         // Transparent acoustic soundproof wall along 1704 & 1703 frontage
-        if (run !== terraceUVs[2]) {
+        if (withScreen) {
           const sx = mx - ix * 2.0, sz = mz - iz * 2.0, sgy = groundY(sx, sz);
           OP.box(sx, sgy + 0.45, sz, L, 1.1, 0.34, ang, C_STONE, M_STONE);
           GL.box(sx, sgy + 3.45, sz, L, 5.0, 0.10, ang, C_GLASS, M_GLASS);
@@ -621,7 +635,6 @@ function buildComplexFeatures() {
             OP.box(px, pgy + 3.1, pz, 0.16, 6.0, 0.26, ang, C_METAL, M_METAL);
           }
         }
-      }
     }
   }
 
@@ -650,7 +663,7 @@ function buildComplexFeatures() {
     const B = mkFrame(224,456,219,512,null,planPoint);
     const [outX, outZ] = planPoint(193,486);
     const outSgn = ((outX - B.mx) * B.rx + (outZ - B.mz) * B.rz) >= 0 ? 1 : -1;
-    const gyB = Math.min(groundY(B.mx, B.mz), -1.8);
+    const gyB = entranceFloor(B.mx,B.mz);
     const ptB = (lx, ly, lz) => [B.mx + lx * B.ux + lz * outSgn * B.rx, gyB + ly, B.mz + lx * B.uz + lz * outSgn * B.rz];
     const boxB = (buf, lx, ly, lz, w, h, d, col, mp) => { const p = ptB(lx, ly, lz); buf.box(p[0], p[1], p[2], w, h, d, B.ang, col, mp); };
     const faceRoad = Math.atan2(B.rx * outSgn, B.rz * outSgn);
@@ -681,7 +694,7 @@ function buildComplexFeatures() {
     if (a1 - a0 > Math.PI) a1 -= Math.PI * 2;
     if (a1 - a0 < -Math.PI) a1 += Math.PI * 2;
     const rIn = 8.2, rOut = 21.8, nFan = 8;
-    const fanTopY = 3.2; // soaring gracefully above complex deck y=0!
+    const fanTopY = gyB + 4.65; // soaring gracefully above complex deck y=0!
     for (let k = 0; k <= nFan; k++) {
       const f = k / nFan, a = lerp(a0, a1, f);
       const ca = Math.cos(a), sa = Math.sin(a);
@@ -691,8 +704,8 @@ function buildComplexFeatures() {
       // Bold radiating dark-charcoal arched steel skylight rib!
       OP.box(fcX + ca * rMid, fanTopY - drop, fcZ + sa * rMid, radSpan + 0.6, 0.34, 0.46, ribAng, C_NAVY, M_METAL);
       // Inner & outer curved vertical support steel columns
-      OP.box(fcX + ca * rIn,  (fanTopY - drop) * 0.5 - 0.6, fcZ + sa * rIn,  0.42, fanTopY - drop + 1.8, 0.42, ribAng, C_NAVY, M_METAL);
-      OP.box(fcX + ca * rOut, (fanTopY - drop) * 0.5 - 0.6, fcZ + sa * rOut, 0.46, fanTopY - drop + 2.0, 0.46, ribAng, C_NAVY, M_METAL);
+      OP.box(fcX + ca * rIn,  (fanTopY+gyB) * 0.5 - drop, fcZ + sa * rIn,  0.42, fanTopY-gyB+0.6, 0.42, ribAng, C_NAVY, M_METAL);
+      OP.box(fcX + ca * rOut, (fanTopY+gyB) * 0.5 - drop, fcZ + sa * rOut, 0.46, fanTopY - drop + 2.0, 0.46, ribAng, C_NAVY, M_METAL);
       // Faceted blue-tinted glass skylight roof panels & recessed asphalt ramp floor between consecutive ribs
       if (k < nFan) {
         const am = lerp(a0, a1, (k + 0.5) / nFan), cam = Math.cos(am), sam = Math.sin(am);
@@ -702,16 +715,21 @@ function buildComplexFeatures() {
         const segAng = Math.atan2(-sam, cam);
         GL.box(fcX + cam * rMid, fanTopY - dropM + 0.14, fcZ + sam * rMid, radSpan - 0.3, 0.10, chordM, segAng, C_GLASS, M_GLASS);
         // Dark underground ramp floor + glowing warm ceiling strip lights under the fan canopy!
-        OP.box(fcX + cam * rMid, gyB - 0.1 - f * 1.6, fcZ + sam * rMid, radSpan - 0.8, 0.25, chordM, segAng, C_ASPH, M_DARK);
         OP.box(fcX + cam * rMid, fanTopY - dropM - 0.28, fcZ + sam * rMid, radSpan * 0.55, 0.12, 0.32, segAng, C_TUNL, M_TUNL);
         // Outer curved retaining wall framing the fan ramp
-        OP.box(fcX + cam * (rOut + 0.3), -0.4, fcZ + sam * (rOut + 0.3), 0.7, 3.8, chordOut, segAng, C_STONE, M_STONE);
+        OP.box(fcX + cam * (rOut + 0.3), gyB+1.4-dropM, fcZ + sam * (rOut + 0.3), 0.7, 3.8, chordOut, segAng, C_STONE, M_STONE);
       }
     }
-    // Pitch-dark underground tunnel mouth at the deep end of the fan canopy!
-    const caE = Math.cos(a1), saE = Math.sin(a1), eAng = Math.atan2(-saE, caE);
-    const rMid = (rIn + rOut) * 0.5;
-    OP.box(fcX + caE * rMid, -0.2, fcZ + saE * rMid, rOut - rIn - 0.6, 3.4, 6.5, eAng, C_DARK, M_DARK);
+    // Continue the driveway between the sidewalls beneath the covered end.
+    const path=WORLD.gates.west.axis;
+    const [sx,sz]=path.at(-2), [ex,ez]=path.at(-1);
+    const length=Math.hypot(ex-sx,ez-sz), tx=(ex-sx)/length,tz=(ez-sz)/length;
+    const angle=Math.atan2(tx,tz), mx=(sx+ex)/2,mz=(sz+ez)/2;
+    const floor=entranceFloor(mx,mz);
+    for (const side of [-1,1])
+      OP.box(mx+side*4.7*tz,floor+2,mz-side*4.7*tx,0.5,4.1,length,angle,C_STONE,M_STONE);
+    OP.box(mx,floor+3.85,mz,9.9,0.38,length,angle,C_GRAN,M_STONE);
+    OP.box(ex+tx*0.2,floor+1.8,ez+tz*0.2,9.5,4.1,0.35,angle,C_DARK,M_DARK);
   }
 
   // ── 9. ① 비스타애비뉴 (1:1 Digital Twin of sp2_vista.jpg & siteplan_fit.jpg!)

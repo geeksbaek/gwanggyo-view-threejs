@@ -3,7 +3,7 @@ import fs from 'node:fs';
 import vm from 'node:vm';
 
 const context=vm.createContext({
-  YEAR:2029, lerp:(a,b,t)=>a+(b-a)*t, clamp:(x,a,b)=>Math.max(a,Math.min(b,x)),
+  JUNCTION:JSON.parse(fs.readFileSync(new URL('../data/junction.json',import.meta.url))), YEAR:2029, lerp:(a,b,t)=>a+(b-a)*t, clamp:(x,a,b)=>Math.max(a,Math.min(b,x)),
 });
 for (const file of ['18_site','19_junction','21_traffic']) {
   vm.runInContext(fs.readFileSync(new URL('../src/'+file+'.js',import.meta.url),'utf8'),context);

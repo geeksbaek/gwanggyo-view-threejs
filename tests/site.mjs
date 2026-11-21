@@ -7,7 +7,7 @@ import {fileURLToPath} from 'node:url';
 const read = path => fs.readFileSync(fileURLToPath(new URL('../'+path,import.meta.url)),'utf8');
 const W = JSON.parse(read('world.json'));
 const NEIGHBORHOOD = JSON.parse(read('data/neighborhood.json'));
-const context = {W, NEIGHBORHOOD, WORLD:{}, FLOOR_H:3, clamp:(x,a,b)=>Math.max(a,Math.min(b,x)), lerp:(a,b,t)=>a+(b-a)*t};
+const context = {JUNCTION:JSON.parse(read('data/junction.json')),W, NEIGHBORHOOD, WORLD:{}, FLOOR_H:3, clamp:(x,a,b)=>Math.max(a,Math.min(b,x)), lerp:(a,b,t)=>a+(b-a)*t};
 vm.createContext(context);
 vm.runInContext(read('src/18_site.js')+
   '\nWORLD.units=registerStacks(); W.site=SITE_OUTLINE.map(p=>planPoint(...p));',context);
@@ -64,10 +64,7 @@ for (const [a,b,c] of rightPair) {
 const [start,,end] = zebras.find(q=>center(q)[0]>420 && center(q)[0]<480);
 assert.ok(end[0]-start[0]>55 && end[1]-start[1]>80);
 console.log('Verified successive crosswalk spacing and orientation of the diagonal approach.');
-const projected = context.junctionTilePoint(150,-16,W.frame);
-assert.ok(Math.abs(projected[0]/256-447175.733213)<0.00001);
-assert.ok(Math.abs(projected[1]/256-203565.668876)<0.00001);
 for (const q of zebras) {
   const [u,v]=center(q);
-  assert.ok(context.withinJunctionRoad(30+u/5,-110+v/5),'crossing outside the photographic road surface');
+  assert.ok(context.withinJunctionRoad(30+u/5,-110+v/5),'crossing outside the traced road footprint');
 }
