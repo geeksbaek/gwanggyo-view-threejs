@@ -659,14 +659,14 @@ function buildComplexFeatures() {
 
   // ── 8. 부출입구 문주 + ICONIC 부채꼴 아치형 유리 스카이라이트 램프 캐노피 (1:1 match to siteplan_fit.jpg & visual9.jpg!)
   {
-    // Portal sits right at U2S(206, 434), spanning north-south across the entry driveway!
-    const B = mkFrame(224,456,219,512,null,planPoint);
-    const [outX, outZ] = planPoint(193,486);
-    const outSgn = ((outX - B.mx) * B.rx + (outZ - B.mz) * B.rz) >= 0 ? 1 : -1;
-    const gyB = entranceFloor(B.mx,B.mz);
-    const ptB = (lx, ly, lz) => [B.mx + lx * B.ux + lz * outSgn * B.rx, gyB + ly, B.mz + lx * B.uz + lz * outSgn * B.rz];
-    const boxB = (buf, lx, ly, lz, w, h, d, col, mp) => { const p = ptB(lx, ly, lz); buf.box(p[0], p[1], p[2], w, h, d, B.ang, col, mp); };
-    const faceRoad = Math.atan2(B.rx * outSgn, B.rz * outSgn);
+    // Leave a car length between the pedestrian crossing and the reader.
+    // Span the lanes perpendicular to the local driveway at the island.
+    const gate=WORLD.gates.west;
+    const [gx,gz]=gate.gate;
+    const dx=Math.sin(gate.gateHeading), dz=-Math.cos(gate.gateHeading);
+    const gyB=entranceFloor(gx,gz), faceRoad=Math.atan2(-dx,-dz);
+    const ptB=(lx,ly,lz)=>[gx-lx*dz-lz*dx,gyB+ly,gz+lx*dx-lz*dz];
+    const boxB=(buf,lx,ly,lz,w,h,d,col,mp)=>buf.box(...ptB(lx,ly,lz),w,h,d,faceRoad,col,mp);
 
     // Sleek fluted silver & white secondary gatehouse portal
     boxB(OP, 0, 4.65, 0, 14.0, 1.35, 2.5, C_SILV, M_METAL);
@@ -675,10 +675,10 @@ function buildComplexFeatures() {
     boxB(OP,  6.2, 2.35, 0, 1.9, 4.8, 2.5, C_STONE, M_STONE);
     boxB(OP, 0, 3.92, 0.1, 11.0, 0.14, 0.36, C_LED, M_LED);
     // Entry divider island + yellow/black barrier arms
-    boxB(OP, 0, 0.18, 2.8, 0.80, 0.36, 4.0, C_GRAN, M_STONE);
-    boxB(OP, 0, 0.80, 2.8, 0.30, 0.95, 0.30, C_METAL, M_METAL);
-    boxB(OP, -2.4, 0.92, 2.8, 4.0, 0.10, 0.10, C_YEL, M_METAL);
-    boxB(OP,  2.4, 0.92, 2.8, 4.0, 0.10, 0.10, C_YEL, M_METAL);
+    boxB(OP, 0, 0.18, 0.0, 0.80, 0.36, 4.0, C_GRAN, M_STONE);
+    boxB(OP, 0, 0.80, 0.0, 0.30, 0.95, 0.30, C_METAL, M_METAL);
+    boxB(OP, -2.4, 0.92, 0.0, 4.0, 0.10, 0.10, C_YEL, M_METAL);
+    boxB(OP,  2.4, 0.92, 0.0, 4.0, 0.10, 0.10, C_YEL, M_METAL);
     const bs = makeSignMesh('CENTREVILLE', { transparent: true, fg: '#f8f6ee', shadow: true, w: 7.4, h: 0.82, font: '700 66px Georgia, serif', track: 12, glow: 0.85 });
     bs.position.set(...ptB(0, 4.68, 1.32)); bs.rotation.y = faceRoad; grp.add(bs);
     const chv = makeSignMesh('2.7m', { w: 9.2, h: 0.44, chevron: true, glow: 0.35 });
@@ -711,14 +711,15 @@ function buildComplexFeatures() {
         const am = lerp(a0, a1, (k + 0.5) / nFan), cam = Math.cos(am), sam = Math.sin(am);
         const dropM = ((k + 0.5) / nFan) * 1.45;
         const chordM = Math.abs(a1 - a0) / nFan * rMid + 0.45;
-        const chordOut = Math.abs(a1 - a0) / nFan * rOut + 0.35;
         const segAng = Math.atan2(-sam, cam);
         GL.box(fcX + cam * rMid, fanTopY - dropM + 0.14, fcZ + sam * rMid, radSpan - 0.3, 0.10, chordM, segAng, C_GLASS, M_GLASS);
         // Dark underground ramp floor + glowing warm ceiling strip lights under the fan canopy!
         OP.box(fcX + cam * rMid, fanTopY - dropM - 0.28, fcZ + sam * rMid, radSpan * 0.55, 0.12, 0.32, segAng, C_TUNL, M_TUNL);
-        // Outer curved retaining wall framing the fan ramp
-        OP.box(fcX + cam * (rOut + 0.3), gyB+1.4-dropM, fcZ + sam * (rOut + 0.3), 0.7, 3.8, chordOut, segAng, C_STONE, M_STONE);
       }
+    }
+    for (const [[ax,az],[bx,bz],fraction] of gate.fanWalls) {
+      const length=Math.hypot(bx-ax,bz-az), angle=Math.atan2(bx-ax,bz-az);
+      OP.box((ax+bx)/2,gyB+1.4-1.45*fraction,(az+bz)/2,0.7,3.8,length,angle,C_STONE,M_STONE);
     }
     // Continue the driveway between the sidewalls beneath the covered end.
     const path=WORLD.gates.west.axis;

@@ -1383,17 +1383,22 @@ function buildCars() {
       let k = c.k || 1; if (k >= p.pts.length) k = 1; while (k < p.pts.length - 1 && p.pts[k][2] < c.t) k++; while (k > 1 && p.pts[k - 1][2] > c.t) k--; c.k = k;
       const a = p.pts[k - 1], b = p.pts[k], f = (c.t - a[2]) / Math.max(b[2] - a[2], 0.01); const dx = b[0] - a[0], dz = b[1] - a[1], L = Math.hypot(dx, dz) || 1;
       const nx = -dz / L, nz = dx / L;
-      const x = lerp(a[0], b[0], f) + nx * c.laneOff, z = lerp(a[1], b[1], f) + nz * c.laneOff;
+      let x=lerp(a[0],b[0],f)+nx*c.laneOff, z=lerp(a[1],b[1],f)+nz*c.laneOff;
+      let hx=dx/L,hz=dz/L;
+      if (active && Math.abs(x)<200 && Math.abs(z)<220) {
+        const pose=frontageTrafficPose(x,z,hx,hz,c.laneOff,c.dir);
+        if (pose) [x,z,hx,hz]=pose;
+      }
       const y = active && (c.local || !withinJunctionRoad(x,z)) ? (Math.hypot(x,z)<550 ? streetDeckY(x,z) : groundY(x,z)) : -500;
       pos.set(x,y,z);
       if (c.local && active) {
         slope.set(streetDeckY(x-1,z)-streetDeckY(x+1,z),2,streetDeckY(x,z-1)-streetDeckY(x,z+1)).normalize();
-        forward.set(dx*c.dir,0,dz*c.dir);
+        forward.set(hx*c.dir,0,hz*c.dir);
         right.crossVectors(slope,forward).normalize();
         forward.crossVectors(right,slope);
         q.setFromRotationMatrix(M.makeBasis(right,slope,forward));
       } else {
-        q.setFromAxisAngle(up,Math.atan2(dx*c.dir,dz*c.dir));
+        q.setFromAxisAngle(up,Math.atan2(hx*c.dir,hz*c.dir));
       }
       M.compose(pos,q,one); m.setMatrixAt(i,M);
       P[i * 3] = x; P[i * 3 + 1] = y + 0.72; P[i * 3 + 2] = z;
