@@ -198,8 +198,8 @@ function buildComplexFeatures() {
   // Exact 0.80m-fit affine transform: official 단지배치도 pixel (u, v) -> scene (x, z) meters!
   const U2S = (u, v) => [-0.25210532 * u + 0.20415737 * v - 14.13187687, -0.20250471 * u - 0.25586374 * v + 196.07265457];
   // Local right-handed frame from siteplan P0=(u0,v0) -> P1=(u1,v1): +lx along P0->P1, +lz perpendicular right (-uz, ux)
-  function mkFrame(u0, v0, u1, v1, baseY = null) {
-    const a = U2S(u0, v0), b = U2S(u1, v1);
+  function mkFrame(u0, v0, u1, v1, baseY = null, project = U2S) {
+    const a = project(u0, v0), b = project(u1, v1);
     const mx = (a[0] + b[0]) * 0.5, mz = (a[1] + b[1]) * 0.5;
     const dx = b[0] - a[0], dz = b[1] - a[1], L = Math.hypot(dx, dz) || 1;
     const ux = dx / L, uz = dz / L, rx = -uz, rz = ux;
@@ -309,6 +309,17 @@ function buildComplexFeatures() {
   }
 
   // ── 1. 1701동 Landmark L-Frame Crown + Illuminated CENTREVILLE Signage (NO floating stickers!)
+  // Roof sites specified in the public sale notice. Panel and mast sizes are illustrative.
+  for (const name of ['1701','1703','1706','1708']) {
+    const tower = WORLD.towerInfo[name];
+    if (!tower.plantRoof) continue;
+    const [x,z] = tower.plantRoof, y = tower.HR + 3.6;
+    OP.cyl(x,y+1.55,z,0.07,0.12,3.1,8,C_METAL,M_METAL);
+    for (let i=0; i<3; i++) {
+      const angle=i*2*Math.PI/3;
+      OP.box(x+0.32*Math.sin(angle),y+2.15,z+0.32*Math.cos(angle),0.32,1.35,0.18,angle,C_WHITE,M_METAL);
+    }
+  }
   const t1 = WORLD.towerInfo['1701'];
   if (t1) {
     const pA = [113.92, -92.99], pB = [115.36, -67.61];
@@ -375,9 +386,9 @@ function buildComplexFeatures() {
 
   // ── 4. 주출입구 문주 + 유리블록 경비실 + 원형 회전광장 (1:1 Digital Twin of sp1_maingate.jpg & siteplan_fit.jpg!)
   {
-    // Frame spans left monolith U2S(294,968) -> right pier U2S(364,988) along 32M 동수원로!
+    // Frame spans left monolith U2S(294,968) -> right pier U2S(364,988) along the southern 32 m frontage!
     // Check outward normal (+lz = rx,rz): dx = -13.56, dz = -19.29 -> rx = +0.818, rz = -0.575 (faces straight out toward 32M 도로!)
-    const G = mkFrame(294, 968, 364, 988);
+    const G = mkFrame(338,1104,424,1120,null,planPoint);
     const faceOut = Math.atan2(G.rx, G.rz);
     const W = G.L; // ~23.6m exact span!
     const hL = 8.1, hR = 5.5; // iconic asymmetric sloping silhouette from sp1_maingate.jpg!
@@ -443,7 +454,7 @@ function buildComplexFeatures() {
     G.box(OP, kx, 1.98, kz + 1.88, 5.3, 0.08, 0.10, C_METAL, M_METAL);
 
     // 원형 회전광장 (Circular Roundabout Center Planter Island at exact U2S(338, 932) — sp1_maingate.jpg & siteplan_fit.jpg!)
-    const [rbx, rbz] = U2S(338, 932), rby = Math.max(groundY(rbx, rbz), -0.45);
+    const [rbx, rbz] = planPoint(395,1060), rby = Math.max(groundY(rbx, rbz), -0.45);
     OP.cyl(rbx, rby + 0.24, rbz, 5.35, 5.55, 0.48, 28, C_GRAN, M_STONE);
     OP.cyl(rbx, rby + 0.56, rbz, 4.95, 5.15, 0.34, 28, C_HEDGE, M_STONE);
     for (let k = 0; k < 12; k++) {
@@ -455,8 +466,8 @@ function buildComplexFeatures() {
   // ── 5. 주출입 지하주차장 포털 + 석가산 2단 폭포 + 상단 연못 & 화이트 티하우스 데크 (1:1 match to sp3_connect.jpg!)
   {
     // 5A) Fluted Silver-Grey CENTREVILLE Underground Parking Portal facing straight onto roundabout U2S(338, 932)!
-    const P = mkFrame(358, 910, 392, 944, -0.25);
-    const [rbx, rbz] = U2S(338, 932);
+    const P = mkFrame(430,1107,460,1074,-0.25,planPoint);
+    const [rbx, rbz] = planPoint(395,1060);
     const outSgn = ((rbx - P.mx) * P.rx + (rbz - P.mz) * P.rz) >= 0 ? 1 : -1;
     const ptP = (lx, ly, lz) => P.pt(lx, ly, lz * outSgn);
     const boxP = (buf, lx, ly, lz, w, h, d, col, mp) => { const p = ptP(lx, ly, lz); buf.box(p[0], p[1], p[2], w, h, d, P.ang, col, mp); };
@@ -480,7 +491,7 @@ function buildComplexFeatures() {
     boxP(OP, -2.1, 3.45, 1.0, 1.4, 0.32, 0.20, [0.85, 0.16, 0.14], M_LED);
     boxP(OP,  2.1, 3.45, 1.0, 1.4, 0.32, 0.20, [0.18, 0.62, 0.92], M_LED);
     // Deep recessed dark descending underground parking tunnel box + always-on ceiling strip lights!
-    boxP(OP, 0, 1.85, -8.5, 9.6, 4.1, 15.5, C_DARK, M_DARK);
+    boxP(OP, 0, 1.85, -16.0, 9.6, 4.1, 0.4, C_DARK, M_DARK);
     boxP(OP, 0, 0.05, -7.5, 9.2, 0.24, 16.0, C_ASPH, M_DARK);
     boxP(OP, -5.2, 2.1, -8.5, 1.0, 4.6, 15.5, C_STONE, M_STONE);
     boxP(OP,  5.2, 2.1, -8.5, 1.0, 4.6, 15.5, C_STONE, M_STONE);
@@ -614,11 +625,30 @@ function buildComplexFeatures() {
     }
   }
 
+  // Stone retaining edges identified in the notice: existing at Sohwa Elementary
+  // and planned along the east park slope. Block courses and heights are approximate.
+  for (const trace of [
+    [[279,203],[362,228],[412,191],[470,147],[552,85]],
+    [[742,388],[766,425],[851,524],[893,579],[938,607],[865,678],[811,824],[754,988],[691,1178]],
+  ]) {
+    for (let i=1; i<trace.length; i++) {
+      const a=planPoint(...trace[i-1]), b=planPoint(...trace[i]);
+      const dx=b[0]-a[0], dz=b[1]-a[1], length=Math.hypot(dx,dz), angle=Math.atan2(-dz,dx);
+      const blocks=Math.ceil(length/1.9);
+      for (let j=0;j<blocks;j++) {
+        const t=(j+0.5)/blocks, x=lerp(a[0],b[0],t), z=lerp(a[1],b[1],t);
+        const y=groundY(x,z), shade=0.29+0.06*Math.sin(j*2.4+i);
+        OP.box(x,y+0.34,z,length/blocks-0.03,0.85,1.18,angle,[shade,shade*0.98,shade*0.92],M_STONE);
+        OP.box(x,y+0.94,z,length/blocks-0.07,0.48,0.90,angle,[shade*1.08,shade*1.04,shade],M_STONE);
+      }
+    }
+  }
+
   // ── 8. 부출입구 문주 + ICONIC 부채꼴 아치형 유리 스카이라이트 램프 캐노피 (1:1 match to siteplan_fit.jpg & visual9.jpg!)
   {
     // Portal sits right at U2S(206, 434), spanning north-south across the entry driveway!
-    const B = mkFrame(206, 412, 206, 456);
-    const [outX, outZ] = U2S(165, 434);
+    const B = mkFrame(224,456,219,512,null,planPoint);
+    const [outX, outZ] = planPoint(193,486);
     const outSgn = ((outX - B.mx) * B.rx + (outZ - B.mz) * B.rz) >= 0 ? 1 : -1;
     const gyB = Math.min(groundY(B.mx, B.mz), -1.8);
     const ptB = (lx, ly, lz) => [B.mx + lx * B.ux + lz * outSgn * B.rx, gyB + ly, B.mz + lx * B.uz + lz * outSgn * B.rz];
@@ -638,14 +668,14 @@ function buildComplexFeatures() {
     boxB(OP,  2.4, 0.92, 2.8, 4.0, 0.10, 0.10, C_YEL, M_METAL);
     const bs = makeSignMesh('CENTREVILLE', { transparent: true, fg: '#f8f6ee', shadow: true, w: 7.4, h: 0.82, font: '700 66px Georgia, serif', track: 12, glow: 0.85 });
     bs.position.set(...ptB(0, 4.68, 1.32)); bs.rotation.y = faceRoad; grp.add(bs);
-    const chv = makeSignMesh('2.3m', { w: 9.2, h: 0.44, chevron: true, glow: 0.35 });
+    const chv = makeSignMesh('2.7m', { w: 9.2, h: 0.44, chevron: true, glow: 0.35 });
     chv.position.set(...ptB(0, 3.62, -0.35)); chv.rotation.y = faceRoad; grp.add(chv);
 
     // ICONIC QUARTER-CIRCLE FAN-SHAPED GLASS SKYLIGHT RAMP CANOPY (부채꼴 아치 캐노피 — siteplan_fit.jpg left of 1703동!)
     // Center of curvature sits right at U2S(276, 444), fanning cleanly from (u=222,v=436) curving around to (u=288,v=378)!
-    const [fcX, fcZ] = U2S(278, 446);
-    const [pStartX, pStartZ] = U2S(216, 434);
-    const [pEndX, pEndZ] = U2S(292, 378);
+    const [fcX, fcZ] = planPoint(307,481);
+    const [pStartX, pStartZ] = planPoint(268,475);
+    const [pEndX, pEndZ] = planPoint(329,422);
     const a0 = Math.atan2(pStartZ - fcZ, pStartX - fcX);
     let a1 = Math.atan2(pEndZ - fcZ, pEndX - fcX);
     if (a1 - a0 > Math.PI) a1 -= Math.PI * 2;
@@ -985,19 +1015,13 @@ function buildWorldProps() {
 
   // ── 1. High-Detail 3D 법원지하차도 (Depressed Retaining Walls, Twin-Bore Portal, Dark Recessed Tunnel + Ceiling Lights & Highway Sign Gantry!)
   {
-    const a = [-149.0, 246.0], b = [57.7, 48.6];
-    const dx = b[0] - a[0], dz = b[1] - a[1], Ltot = Math.hypot(dx, dz);
-    const ux = dx / Ltot, uz = dz / Ltot;      // along ramp toward tunnel portal (+X, -Z)
-    const nx = -uz, nz = ux;                   // lateral across twin bores
-    const ang = Math.atan2(-uz, ux);
-    const halfW = 8.4; // outer retaining wall half-width (spans both 2-lane bores + central concrete divider!)
-
-    // Sample surface road reference along flanking 광교중앙로 lanes (+-17m laterally) so retaining walls match surface grade cleanly!
-    const segs = 28;
-    for (let k = 0; k < segs; k++) {
-      const f0 = k / segs, f1 = (k + 1) / segs, fm = (f0 + f1) * 0.5;
-      const x0 = lerp(a[0], b[0], f0), z0 = lerp(a[1], b[1], f0);
-      const x1 = lerp(a[0], b[0], f1), z1 = lerp(a[1], b[1], f1);
+    const stations = rampStations(36);
+    for (let k=1; k<stations.length; k++) {
+      const {x:x0,z:z0} = stations[k-1], {x:x1,z:z1} = stations[k];
+      const length = Math.hypot(x1-x0,z1-z0);
+      const nx = -(z1-z0)/length, nz = (x1-x0)/length;
+      const ang = Math.atan2(-(z1-z0),x1-x0);
+      const halfW = (stations[k-1].halfW+stations[k].halfW)/2;
       const xm = (x0 + x1) * 0.5, zm = (z0 + z1) * 0.5, sL = Math.hypot(x1 - x0, z1 - z0) + 0.35;
       const gyFloor = groundY(xm, zm);
       const gySurfL = groundY(xm - nx * 16.0, zm - nz * 16.0);
@@ -1029,7 +1053,10 @@ function buildWorldProps() {
     }
 
     // Twin-Bore Reinforced Concrete Tunnel Portal at (57.7, 48.6) — FLUSH with surface intersection grade (exact match to ov_complex.jpg!)
-    const px = b[0], pz = b[1];
+    const {x:px,z:pz,halfW} = stations.at(-1), previous = stations.at(-2);
+    const length = Math.hypot(px-previous.x,pz-previous.z);
+    const ux=(px-previous.x)/length, uz=(pz-previous.z)/length;
+    const nx=-uz, nz=ux, ang=Math.atan2(-uz,ux);
     const gyP = groundY(px, pz);
     const gySurfP = (groundY(px - nx * 18, pz - nz * 18) + groundY(px + nx * 18, pz + nz * 18)) * 0.5;
     const pHeadY = gySurfP - 0.12; // sits cleanly flush with flanking 광교중앙로 surface lanes!
@@ -1047,9 +1074,18 @@ function buildWorldProps() {
     // Deep 36m Pitch-Dark Recessed Twin Tunnel Interior Box + Warm Amber Ceiling Lights!
     const tunL = 36.0;
     const tx = px + ux * (tunL * 0.5 + 1.0), tz = pz + uz * (tunL * 0.5 + 1.0);
-    OP.box(tx, boreFloor + boreH * 0.5, tz, tunL, boreH, halfW * 1.94, ang, C_DARK, M_DARK);
-    // Flush green landscaped triangle median capping the portal mouth (never towering above the intersection!)
-    OP.box(px + ux * 11.5, pHeadY + 0.15, pz + uz * 11.5, 22.0, 0.32, halfW * 1.88, ang, C_TURF, M_CONC);
+    OP.box(tx, boreFloor, tz, tunL, 0.25, halfW*2, ang, C_ASPH, M_DARK);
+    // The underground ceiling faces into the bore. Its top surface is the
+    // registered terrain above, which slopes independently of the tunnel.
+    const ceiling = new THREE.PlaneGeometry(tunL, halfW*2);
+    ceiling.rotateX(Math.PI/2);
+    ceiling.rotateY(ang);
+    ceiling.translate(tx,pHeadY-0.175,tz);
+    OP.addGeo(ceiling,C_CONC,M_CONC);
+    OP.box(px+ux*tunL,boreFloor+boreH/2,pz+uz*tunL,0.3,boreH,halfW*2,ang,C_DARK,M_DARK);
+    for (const side of [-1,1]) {
+      OP.box(tx+nx*halfW*side,boreFloor+boreH/2,tz+nz*halfW*side,tunL,boreH,0.3,ang,C_WALL,M_CONC);
+    }
     for (let k = 0; k < 6; k++) {
       const ld = 2.6 + k * 5.0;
       for (const sgn of [-1, 1]) {
@@ -1243,129 +1279,27 @@ function buildWorldProps() {
     }
   }
 
-  // ── 4. Bespoke 3D 정보과학고사거리 (법원사거리): Raised Traffic Islands (교통섬), 4-Corner Signal Gantries, Bus Shelters, Guardrails & Mini-Park!
+  // Surveyed stop locations and tagged street furniture.
   {
-    const C_TERRA = [0.56, 0.30, 0.24], C_CURB = [0.76, 0.74, 0.70];
-    // 4A) Two Raised Triangular Pedestrian Traffic Islands (NW 교통섬 & NE 교통섬 right by 1701동!)
-    const islands = [
-      { cx: 129.0, cz: 11.2, pts: [[111.5, 18.8], [137.0, 13.2], [138.0, 2.5]], ang: -0.35, w: 12.5, d: 8.5, shade: true },
-      { cx: 136.0, cz: -32.0, pts: [[137.2, -45.5], [146.0, -29.0], [124.5, -21.5]], ang: 0.55, w: 13.5, d: 9.2, shade: true },
-    ];
-    for (const isl of islands) {
-      const gy = groundY(isl.cx, isl.cz);
-      // Raised granite curb & pedestrian refuge platform (0.28m above asphalt)
-      const shp = new THREE.Shape(isl.pts.map(p => new THREE.Vector2(p[0], -p[1])));
-      const ext = new THREE.ExtrudeGeometry(shp, { depth: 0.36, bevelEnabled: false });
-      ext.rotateX(-Math.PI * 0.5);
-      ext.translate(0, gy - 0.08, 0);
-      OP.addGeo(ext, C_CURB, M_CONC);
-      // Protective galvanized pedestrian bollards & guardrails along island rim
-      for (let i = 0; i < isl.pts.length; i++) {
-        const a = isl.pts[i], b = isl.pts[(i + 1) % isl.pts.length];
-        for (const f of [0.22, 0.50, 0.78]) {
-          const bx = lerp(a[0], b[0], f), bz = lerp(a[1], b[1], f);
-          OP.cyl(bx, gy + 0.65, bz, 0.07, 0.08, 0.95, 6, C_POLE, M_METAL);
-        }
-        const mx = (a[0] + b[0]) * 0.5, mz = (a[1] + b[1]) * 0.5;
-        const L = Math.hypot(b[0] - a[0], b[1] - a[1]), ang = Math.atan2(-(b[1] - a[1]), b[0] - a[0]);
-        OP.box(mx, gy + 0.92, mz, L * 0.56, 0.07, 0.07, ang, C_POLE, M_METAL);
+    // A platform node records a stop, but only an explicit shelter tag confirms a canopy.
+    for (const stop of NEIGHBORHOOD.stops) {
+      const [x,z] = stop.p, y = groundY(x,z);
+      const street = nearestStreet(x,z);
+      if (!street) continue;
+      const ang = street.angle;
+      OP.cyl(x,y+1.5,z,0.055,0.065,3,8,C_POLE,M_METAL);
+      OP.box(x,y+2.55,z,0.55,0.85,0.12,ang,[0.035,0.32,0.48],M_METAL);
+      if (stop.shelter === 'yes') {
+        const dx = Math.cos(ang), dz = -Math.sin(ang);
+        OP.box(x,y+2.7,z,4.8,0.16,1.75,ang,C_METAL,M_METAL);
+        for (const d of [-2.1,2.1]) OP.cyl(x+dx*d,y+1.3,z+dz*d,0.07,0.07,2.6,8,C_POLE,M_METAL);
+        if (stop.bench === 'yes') OP.box(x,y+0.46,z,2.5,0.15,0.52,ang,C_WOOD,M_WOOD);
       }
-      // Sunshade parasol / pedestrian waiting shelter on the traffic island (characteristic of Korean intersections!)
-      OP.cyl(isl.cx, gy + 1.85, isl.cz, 0.12, 0.14, 3.2, 8, C_METAL, M_METAL);
-      OP.cyl(isl.cx, gy + 3.45, isl.cz, 0.12, 2.35, 0.72, 6, [0.20, 0.44, 0.34], M_CONC);
-      // Pedestrian walk signal bollard on the island corner
-      OP.cyl(isl.pts[1][0] - 1.5, gy + 1.85, isl.pts[1][1] - 1.0, 0.08, 0.09, 3.3, 6, C_POLE, M_METAL);
-      OP.box(isl.pts[1][0] - 1.5, gy + 3.1, isl.pts[1][1] - 1.0, 0.34, 0.78, 0.24, isl.ang, C_METAL, M_METAL);
-      OP.box(isl.pts[1][0] - 1.5, gy + 2.9, isl.pts[1][1] - 1.0, 0.24, 0.24, 0.28, isl.ang, [0.15, 0.95, 0.45], M_LED);
     }
 
-    // 4B) 4 Full-Span Galvanized Cantilever Traffic Signal Gantries at exact 4 outer corners of 정보과학고사거리!
-    const jGantries = [
-      { x: 138.0, z: 16.5,  ang: 0.02,   len: 12.5, green: true },  // NW corner spanning 월드컵로 NW
-      { x: 178.5, z: 4.5,   ang: -1.55,  len: 13.5, green: false }, // SW-W corner spanning 동수원로 SW
-      { x: 178.0, z: -33.5, ang: 1.58,   len: 13.5, green: false }, // SW-E corner spanning 동수원로 SW
-      { x: 136.5, z: -48.5, ang: 0.20,   len: 13.0, green: true },  // SE corner spanning 월드컵로 SE 6-lane
-      { x: 122.0, z: 9.0,   ang: -1.24,  len: 13.5, green: true },  // N corner spanning 광교중앙로 terracotta lanes
-    ];
-    for (const gt of jGantries) {
-      const gy = groundY(gt.x, gt.z);
-      OP.cyl(gt.x, gy + 3.85, gt.z, 0.14, 0.20, 7.7, 8, C_POLE, M_METAL);
-      const bx = gt.x + Math.cos(gt.ang) * (gt.len * 0.5), bz = gt.z - Math.sin(gt.ang) * (gt.len * 0.5);
-      OP.box(bx, gy + 7.25, bz, gt.len, 0.22, 0.22, gt.ang, C_POLE, M_METAL);
-      // Two 4-aspect Korean horizontal signal heads mounted along the long cantilever arm!
-      for (const f of [0.42, 0.80]) {
-        const hx = gt.x + Math.cos(gt.ang) * (gt.len * f), hz = gt.z - Math.sin(gt.ang) * (gt.len * f);
-        OP.box(hx, gy + 6.92, hz, 1.85, 0.52, 0.30, gt.ang, C_METAL, M_METAL);
-        const colL = gt.green ? [0.14, 0.96, 0.46] : [0.98, 0.20, 0.14];
-        OP.box(hx + Math.cos(gt.ang) * (gt.green ? 0.55 : -0.55), gy + 6.92, hz - Math.sin(gt.ang) * (gt.green ? 0.55 : -0.55), 0.30, 0.30, 0.36, gt.ang, colL, M_LED);
-      }
-      // Corner pedestrian signal pole
-      OP.box(gt.x, gy + 3.4, gt.z, 0.34, 0.78, 0.26, gt.ang, C_METAL, M_METAL);
-      OP.box(gt.x, gy + 3.2, gt.z, 0.24, 0.24, 0.32, gt.ang, gt.green ? [0.98, 0.22, 0.16] : [0.15, 0.95, 0.46], M_LED);
-    }
-
-    // 4C) Overhead Korean Directional Road Sign Gantry on 광교중앙로 terracotta southbound approach!
-    {
-      const sx = 104.5, sz = 21.5, gy = groundY(sx, sz);
-      const ang = Math.atan2(-(4.5 - 28.0), 127.0 - 99.0); // along southbound travel direction
-      const nx = Math.sin(ang), nz = Math.cos(ang);
-      for (const sgn of [-1, 1]) {
-        OP.cyl(sx + nx * 8.2 * sgn, gy + 4.4, sz + nz * 8.2 * sgn, 0.22, 0.26, 8.8, 8, C_POLE, M_METAL);
-      }
-      OP.box(sx, gy + 8.3, sz, 0.40, 0.45, 16.8, ang, C_POLE, M_METAL);
-      OP.box(sx, gy + 7.2, sz, 0.32, 0.32, 16.8, ang, C_POLE, M_METAL);
-      const dirSign = makeSignMesh('← 광교호수공원 · ↑ 영통 · → 정보과학고', {
-        bg: '#0b5d3b', fg: '#ffffff', w: 11.4, h: 2.15,
-        font: '700 50px "Noto Sans KR", sans-serif', track: 2,
-        sub: '정보과학고사거리 (광교중앙로 · 월드컵로)', glow: 0.95, border: '#ffffff',
-      });
-      dirSign.position.set(sx - Math.cos(ang) * 0.35, gy + 7.75, sz + Math.sin(ang) * 0.35);
-      dirSign.rotation.y = Math.atan2(-Math.cos(ang), Math.sin(ang));
-      grp.add(dirSign);
-    }
-
-    // 4D) 2 Modern Glass Bus Stop Shelters (버스정류장 + BIT LED display): 광교중앙로 NB (beside 1701동!) & 동수원로 SW!
-    const shelters = [
-      { x: 93.2,  z: -3.2,  ang: 0.65 },  // 광교 자연앤 센트레빌 앞 정류장 (북행)
-      { x: 204.0, z: -29.8, ang: 0.03 },  // 동수원로 정류장 (북동행)
-    ];
-    for (const sh of shelters) {
-      const gy = groundY(sh.x, sh.z);
-      OP.box(sh.x, gy + 0.14, sh.z, 7.6, 0.28, 2.4, sh.ang, C_CURB, M_CONC);
-      OP.box(sh.x, gy + 2.75, sh.z, 7.2, 0.22, 2.3, sh.ang, C_METAL, M_METAL);
-      OP.box(sh.x, gy + 2.60, sh.z, 6.4, 0.08, 0.25, sh.ang, C_LED, M_LED);
-      for (const ox of [-3.2, 0.0, 3.2]) {
-        OP.cyl(sh.x + ox * Math.cos(sh.ang), gy + 1.4, sh.z - ox * Math.sin(sh.ang), 0.08, 0.08, 2.6, 6, C_METAL, M_METAL);
-      }
-      const bx = -Math.sin(sh.ang) * 0.95, bz = -Math.cos(sh.ang) * 0.95;
-      GL.box(sh.x + bx, gy + 1.4, sh.z + bz, 6.4, 2.2, 0.10, sh.ang, C_GLASS, M_GLASS);
-      // Glowing blue/amber Bus Information Terminal (BIT) totem right beside shelter
-      OP.box(sh.x + Math.cos(sh.ang) * 4.1, gy + 1.35, sh.z - Math.sin(sh.ang) * 4.1, 0.45, 2.4, 0.24, sh.ang, C_METAL, M_METAL);
-      OP.box(sh.x + Math.cos(sh.ang) * 4.1, gy + 1.75, sh.z - Math.sin(sh.ang) * 4.1, 0.36, 0.72, 0.28, sh.ang, [0.22, 0.76, 1.0], M_LED);
-    }
-
-    // 4E) NW Corner Mini-Park Pavilion (법원사거리 소공원 — visible right behind NW slip lane in Naver aerial photo!)
-    {
-      const px = 117.5, pz = 46.0, gy = groundY(px, pz), ang = -0.62;
-      OP.box(px, gy + 0.22, pz, 11.5, 0.44, 6.8, ang, C_CURB, M_CONC);
-      OP.box(px, gy + 3.45, pz, 10.6, 0.32, 5.8, ang, C_WOOD, M_WOOD);
-      OP.box(px, gy + 3.66, pz, 11.0, 0.16, 6.2, ang, C_WHITE, M_CONC);
-      for (const [dx, dz] of [[-4.4, -2.2], [0, -2.2], [4.4, -2.2], [-4.4, 2.2], [0, 2.2], [4.4, 2.2]]) {
-        const ca = Math.cos(ang), sa = Math.sin(ang);
-        OP.cyl(px + dx * ca - dz * sa, gy + 1.85, pz + dx * sa + dz * ca, 0.16, 0.18, 3.2, 6, C_CONC, M_CONC);
-      }
-      OP.box(px, gy + 3.24, pz, 8.8, 0.10, 0.22, ang, C_LED, M_LED);
-    }
-
-    // 4F) Planted Median Islands along 월드컵로 SE Boulevard (matching the green tree medians inside the yellow chevron zone!)
-    for (const [mx, mz, ang] of [[143.5, -75.0, 1.24], [126.5, -112.0, 0.98]]) {
-      const gy = groundY(mx, mz);
-      OP.box(mx, gy + 0.18, mz, 9.5, 0.36, 2.4, ang, C_CURB, M_CONC);
-      OP.box(mx, gy + 0.40, mz, 8.8, 0.16, 1.8, ang, C_TURF, M_CONC);
-    }
   }
 
-  // ── 5. 3D Traffic Signal Gantries at Other Major Intersections (skip 정보과학고사거리 since bespoke 4-corner gantries are placed above!)
+  // Signal positions and phases at the photographed junction are unverified.
   if (W.signals && W.signals.length) {
     for (let i = 0; i < W.signals.length; i++) {
       const [sx, sz] = W.signals[i];

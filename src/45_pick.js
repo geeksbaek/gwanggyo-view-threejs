@@ -16,9 +16,12 @@ function initPick() {
   // Exact sub-meter amenity coordinates mapped 1:1 from official 단지배치도!
   const U2S = (u, v) => [-0.25210532 * u + 0.20415737 * v - 14.13187687, -0.20250471 * u - 0.25586374 * v + 196.07265457];
   const mkAm = (name, sub, u, v, r) => { const [x, z] = U2S(u, v); return { name, sub, x, z, r }; };
+  const planAmenity = (name,sub,u,v,r) => {
+    const [x,z] = planPoint(u,v); return {name,sub,x,z,r};
+  };
   const amenities = [
-    mkAm('주출입구 문주 · 회전광장 · 지하주차장 램프', '32m 도로 진입부', 330, 960, 22),
-    mkAm('부출입구 · 부채꼴 지하주차장 램프', '51.5m 도로(법원지하차도) 진입부', 225, 424, 20),
+    planAmenity('남측 주출입구','월드컵로 · 32 m 도로 · 승하차 구역 계획',381,1112,17),
+    planAmenity('서측 부출입구','광교중앙로 · 51.5 m 도로 · 지하 1층 진입',222,484,15),
     mkAm('근린생활시설 (B1F)', '단지 내 스트리트 상가', 396, 978, 16),
     mkAm('키즈&맘스라운지 (B1F)', '가족형 놀이·문화공간', 286, 948, 14),
     mkAm('센트레 라이브러리 · 다 함께 돌봄센터 (B1F)', '작은도서관 · 돌봄센터', 192, 875, 16),
@@ -44,7 +47,7 @@ function rayPrism(o, d, n, px, pz, y0, y1) {
     const t = ((ax - o.x) * ez - (az - o.z) * ex) / den, s = ((ax - o.x) * d.z - (az - o.z) * d.x) / den;
     if (t > 0 && t < best && s >= 0 && s <= 1) { const y = o.y + t * d.y; if (y >= y0 && y <= y1) best = t; }
   }
-  if (d.y < 0 && o.y > y1) { const t = (y1 - o.y) / d.y; if (t < best) { const x = o.x + t * d.x, z = o.z + t * d.z; let c = false; for (let i = 0; i < n; i++) { const j = (i + 1) % n, z1 = pz(i), z2 = pz(j); if ((z1 > z) !== (z2 > z) && x < (px(j) - px(i)) * (z - z1) / (z2 - z1) + px(i)) c = !c; } if (c) best = t; } }
+  if ((d.y < 0 && o.y > y1) || (d.y > 0 && o.y < y0)) { const t = ((d.y < 0 ? y1 : y0) - o.y) / d.y; if (t < best) { const x = o.x + t * d.x, z = o.z + t * d.z; let c = false; for (let i = 0; i < n; i++) { const j = (i + 1) % n, z1 = pz(i), z2 = pz(j); if ((z1 > z) !== (z2 > z) && x < (px(j) - px(i)) * (z - z1) / (z2 - z1) + px(i)) c = !c; } if (c) best = t; } }
   return best;
 }
 function rayGround(o, d, maxT) {
@@ -88,7 +91,10 @@ function pickAt(cam, nx, ny, inside) {
   }
   for (const tw of W.towers) {
     if (inside && tw.name === '1703') continue;
-    const t = rayPrism(o, d, tw.p.length, k => tw.p[k][0], k => tw.p[k][1], -0.5, 0.9 + tw.levels * FLOOR_H + 2.2);
+    const prism = (poly, bottom, top) => rayPrism(o,d,poly.length,k=>poly[k][0],k=>poly[k][1],bottom,top);
+    const base = tw.piloti?.ceiling ?? -0.5;
+    let t = prism(tw.p,base,0.9 + tw.levels*FLOOR_H + 1.35);
+    if (tw.piloti) t = Math.min(t,prism(tw.piloti.enclosed,-0.5,base));
     if (t < best) { best = t; tower = tw; hit = -1; }
   }
   // Check terrain occlusion against buildings/towers
@@ -99,7 +105,8 @@ function pickAt(cam, nx, ny, inside) {
     }
   }
   if (tower) {
-    const sub = tower.name === '1703' ? '우리 동 · 이 라인 ' + tower.levels + '층' : '이 라인 ' + tower.levels + '층';
+    const unit = nearestStack(tower,o.x+best*d.x,o.z+best*d.z);
+    const sub = unit.line+'호 라인 추정 · '+unit.type+' · 주거 '+unit.first+'~'+unit.last+'층';
     return { name: '광교 자연앤 센트레빌 ' + tower.name + '동', sub, dist: best };
   }
   if (hit >= 0) {
@@ -118,6 +125,18 @@ function pickAt(cam, nx, ny, inside) {
     if (!inside || gh.t < 450) {
       for (const am of PICK.amenities) {
         if (Math.hypot(gh.x - am.x, gh.z - am.z) < am.r) return { name: am.name, sub: am.sub, dist: gh.t };
+      }
+    }
+    for (const stop of NEIGHBORHOOD.stops) {
+      if (Math.hypot(gh.x-stop.p[0],gh.z-stop.p[1]) < 4) {
+        return {name: stop.name, sub: '버스 정류장'+(stop.ref ? ' · '+stop.ref : ''), dist:gh.t};
+      }
+    }
+    if (Math.hypot(gh.x,gh.z)<550) {
+      const street = nearestStreet(gh.x,gh.z), road = street?.road;
+      if (road && street.distance < (Number(road.width) || (Number(road.lanes) || 2)*3.1)/2) {
+        const sub = [road.lanes && road.lanes+'차로',road.oneway === 'yes' && '일방통행'].filter(Boolean).join(' · ');
+        return {name:road.name,sub,dist:gh.t};
       }
     }
     if (W.landmarks) {
