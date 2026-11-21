@@ -2,10 +2,18 @@
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import vm from 'node:vm';
+import { createHash } from 'node:crypto';
 const file=fs.readFileSync(new URL('../data/streets.glb',import.meta.url));
 assert.equal(file.readUInt32LE(0),0x46546c67);
 const jsonLength=file.readUInt32LE(12);
 const gltf=JSON.parse(file.subarray(20,20+jsonLength));
+const packedFile=fs.readFileSync(new URL('../data/streets.meshopt.glb',import.meta.url));
+const packed=JSON.parse(packedFile.subarray(20,20+packedFile.readUInt32LE(12)));
+assert.equal(packed.asset.extras.sourceSHA256,createHash('sha256').update(file).digest('hex'),
+  'Regenerate the compressed street mesh after changing the source GLB');
+assert.deepEqual(packed.scenes,gltf.scenes);
+assert.equal(JSON.stringify(packed.accessors),JSON.stringify(gltf.accessors));
+assert.ok(packed.bufferViews.every(v=>v.extensions?.EXT_meshopt_compression));
 const binary=28+jsonLength;
 assert.equal(gltf.images,undefined);
 const batches={};

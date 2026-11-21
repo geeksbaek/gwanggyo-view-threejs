@@ -3,7 +3,7 @@ const POST = {};
 function initPost(renderer, w, h) {
   const mkRT = (w, h, opt = {}) => new THREE.WebGLRenderTarget(w, h, { type: THREE.HalfFloatType, minFilter: THREE.LinearFilter, magFilter: THREE.LinearFilter, ...opt });
   POST.a = mkRT(w, h, { depthTexture: new THREE.DepthTexture(w, h, THREE.UnsignedIntType), samples: POST.msaa ? 4 : 0 });
-  POST.b = mkRT(w, h, { samples: 4, depthTexture: new THREE.DepthTexture(w, h, THREE.UnsignedIntType) }); POST.c = mkRT(w, h, { depthBuffer: false });
+  POST.b = mkRT(w, h, { samples: POST.msaa ? 4 : 0, depthTexture: new THREE.DepthTexture(w, h, THREE.UnsignedIntType) }); POST.c = mkRT(w, h, { depthBuffer: false });
   POST.bl = [mkRT(w >> 2, h >> 2, { depthBuffer: false }), mkRT(w >> 2, h >> 2, { depthBuffer: false }), mkRT(w >> 3, h >> 3, { depthBuffer: false }), mkRT(w >> 3, h >> 3, { depthBuffer: false })];
   POST.cam = new THREE.OrthographicCamera(-1, 1, 1, -1, 0, 1);
   const VS = `varying vec2 vUv; void main(){ vUv=uv; gl_Position=vec4(position.xy,0.0,1.0); }`;
@@ -77,20 +77,20 @@ function initPost(renderer, w, h) {
   POST.blur = new THREE.ShaderMaterial({ uniforms: { tC: { value: null }, uDir: { value: new THREE.Vector2() } }, vertexShader: VS, depthTest: false, depthWrite: false,
     fragmentShader: `precision highp float; varying vec2 vUv; uniform sampler2D tC; uniform vec2 uDir; void main(){ vec3 c=texture2D(tC,vUv).rgb*0.227; c+=(texture2D(tC,vUv+uDir*1.385).rgb+texture2D(tC,vUv-uDir*1.385).rgb)*0.316; c+=(texture2D(tC,vUv+uDir*3.231).rgb+texture2D(tC,vUv-uDir*3.231).rgb)*0.070; gl_FragColor=vec4(c,1.0); }` });
   POST.out = new THREE.ShaderMaterial({
-    uniforms: { tC: { value: null }, tB1: { value: null }, tB2: { value: null }, uExp: { value: 1 }, uTime: U.uTime, uFade: { value: 1 } }, vertexShader: VS, depthTest: false, depthWrite: false,
+    toneMapped:false,
+    uniforms: { toneMappingExposure:{value:1.0},  tC: { value: null }, tB1: { value: null }, tB2: { value: null }, uExp: { value: 1 }, uTime: U.uTime, uFade: { value: 1 } }, vertexShader: VS, depthTest: false, depthWrite: false,
     fragmentShader: /* glsl */`precision highp float; varying vec2 vUv; uniform sampler2D tC, tB1, tB2; uniform float uExp, uTime, uFade;
-      vec3 aces(vec3 x){ // Stephen Hill's fitted ACES (RRT+ODT)
-        const mat3 A=mat3(0.59719,0.07600,0.02840, 0.35458,0.90834,0.13383, 0.04823,0.01566,0.83777);
-        const mat3 B=mat3(1.60475,-0.10208,-0.00327, -0.53108,1.10813,-0.07276, -0.07367,-0.00605,1.07602);
-        x=A*x; vec3 a=x*(x+0.0245786)-0.000090537; vec3 b=x*(0.983729*x+0.4329510)+0.238081; return clamp(B*(a/b),0.0,1.0); }
+      #include <tonemapping_pars_fragment>
       float h(vec2 p){ vec3 p3=fract(vec3(p.xyx)*.1031); p3+=dot(p3,p3.yzx+33.33); return fract((p3.x+p3.y)*p3.z); }
       void main(){
         vec3 c=texture2D(tC,vUv).rgb*uExp; c+=texture2D(tB1,vUv).rgb*0.09+texture2D(tB2,vUv).rgb*0.06;
         vec2 q=vUv-0.5; c*=1.0-dot(q,q)*0.16;
-        c=aces(c*1.12);
+        c=AgXToneMapping(max(c,0.0));
+        // Pivot contrast around photographic middle gray in display-linear space.
+        vec3 pivot=vec3(0.18);
+        c=mix(pivot*pow(c/pivot,vec3(1.12)),
+              1.-(1.-pivot)*pow((1.-c)/(1.-pivot),vec3(1.12)),step(pivot,c));
         c=mix(12.92*c,1.055*pow(c,vec3(1.0/2.4))-0.055,step(0.0031308,c));
-        { float l=dot(c,vec3(0.2126,0.7152,0.0722)); c=mix(vec3(l),c,1.03);
-          c=mix(c,c*c*(3.0-2.0*c),0.10); c*=mix(vec3(0.988,0.996,1.018),vec3(1.015,1.004,0.990),smoothstep(0.15,0.82,l)); }
         c+=(h(gl_FragCoord.xy+fract(uTime)*91.0)-0.5)/255.0*2.2;
         gl_FragColor=vec4(c*uFade,1.0); }`,
   });
