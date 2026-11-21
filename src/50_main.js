@@ -140,6 +140,8 @@ function updateInfo(a) {
   if (!$('info')) return;
   const dirs = ['북', '북동', '동', '남동', '남', '남서', '서', '북서'], az = (a.sun.az / RAD % 360 + 360) % 360;
   $('dateLab').textContent = fmtDate(S.doy); $('timeLab').textContent = fmtH(S.hour); $('clock').textContent = fmtDate(S.doy) + ' ' + fmtH(S.hour);
+  const weekday=(JANUARY_FIRST+S.doy)%7;
+  $('i-traffic').textContent=['일','월','화','수','목','금','토'][weekday]+'요일 · 기준 피크의 '+Math.round(100*trafficDemand(S.doy,S.hour))+'%';
   if (ENV.infoDoy !== S.doy) { ENV.infoDoy = S.doy; ENV.st = sunTimes(S.doy); }
   const st = ENV.st, lv = ENV.liv;
   $('i-rise').textContent = st.rise != null ? fmtH(st.rise / 60) : '–'; $('i-set').textContent = st.set != null ? fmtH(st.set / 60) : '–';
@@ -356,7 +358,7 @@ function tick(dt) {
     const ds = Math.max(dt, 0) * 1.5; d.t = SHOT ? want : clamp(d.t + clamp(want - d.t, -ds, ds), 0, 1); const e = d.t * d.t * (3 - 2 * d.t);
     if (d.rot !== undefined) d.mesh.rotation.y = d.rot * e; else d.mesh.position.set(d.px + d.sx * e, 0, d.pz + d.sz * e); }
   { const rl = view.drone ? '단지 전경' : (roomAt(view.pos.x, view.pos.z) || '집'); if (rl !== view.rl) { view.rl = rl; $('roomLab').textContent = rl; } drawMap(); }
-  WORLD.updateCars(dt, cam, clamp(0.25 + 0.75 * (1 - U.uLate.value) * (0.5 + 0.5 * sstep(5, 8, S.hour)), 0.1, 1));
+  WORLD.updateCars(dt, cam, trafficDemand(S.doy,S.hour));
   if (SHADOW.dirty) { renderShadow(renderer); SHADOW.dirty = false; }
   // exposure adaptation + interior balance
   const ea = SHOT ? 1 : 1 - Math.exp(-dt * 2.5); ENV.exp = Math.exp(lerp(Math.log(ENV.exp), Math.log(ENV.expTarget), ea));

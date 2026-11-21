@@ -22,6 +22,7 @@ function junctionMarkings(satInner) {
   if (satInner) {
     const im=satInner.image, k=im.width/1800;
     ctx.drawImage(im,930*k,790*k,230*k,220*k,0,0,1150,1100);
+    clearPhotographedTraffic(ctx);
   }
   const paint = 'rgba(230,226,211,0.84)';
   function line(points, color, width, dash = []) {
@@ -200,6 +201,7 @@ async function loadJunctionPhoto(texture,frame) {
   try {
     await Promise.all(Array.from({length:4},worker));
     ctx.drawImage(mosaic.canvas,x0*256-origin[0],y0*256-origin[1]);
+    clearPhotographedTraffic(ctx);
     softenJunctionEdge(ctx);
     texture.image=ctx.canvas;
     texture.needsUpdate=true;
@@ -207,4 +209,49 @@ async function loadJunctionPhoto(texture,frame) {
   } catch {
     controller.abort(); // Keep the entire registered offline surface on failure.
   }
+}
+
+// Restore small vehicle-shaped areas of the registered source image using
+// adjacent pavement on the same lane. Coordinates are source trace pixels.
+function clearPhotographedTraffic(ctx) {
+  const patches=[
+    // centre, pavement sample offset, half length, half width, angle in degrees
+    [477,55,13,28,18,9,65],[543,204,-9,-24,17,9,72],[583,347,4,20,16,8,78],
+    [523,370,-2,-24,17,8,102],[514,397,-11,19,16,8,112],
+    [493,423,-17,8,17,8,141],[466,455,18,-14,17,9,132],
+    [508,453,23,-8,17,9,152],[597,432,8,-22,16,9,97],
+    [640,476,-21,9,17,9,85],[662,491,13,-12,15,8,99],[605,545,9,-24,17,9,106],
+    [796,457,25,0,17,8,0],[796,475,24,0,17,8,0],
+    [857,457,25,0,17,8,0],[859,474,25,0,17,8,0],
+    [432,621,-18,14,17,9,-39],[413,595,-22,16,18,9,-36],
+    [329,688,20,-18,17,9,-41],[211,709,20,-19,16,8,-46],
+    [249,576,22,-15,17,8,-37],[105,703,-30,31,29,9,-45],[18,790,19,-20,15,8,-47],
+    [604,650,-1,19,15,8,90],[625,679,0,25,14,8,89],[582,742,2,23,18,8,94],
+    [622,731,-1,21,17,9,94],[618,807,-1,28,17,8,92],[592,906,1,-22,17,8,93],
+    [573,951,1,-23,17,9,93],
+  ];
+  const tile=document.createElement('canvas');
+  tile.width=tile.height=136;
+  const g=tile.getContext('2d'), scale=ctx.canvas.width/1150;
+  ctx.save();
+  ctx.setTransform(scale,0,0,scale,0,0);
+  for (const [x,y,dx,dy,length,width,angle] of patches) {
+    const extent=34;
+    g.clearRect(0,0,136,136);
+    g.drawImage(ctx.canvas,(x+dx-extent)*scale,(y+dy-extent)*scale,68*scale,68*scale,0,0,136,136);
+    g.save();
+    g.translate(68,68);
+    g.rotate(angle*Math.PI/180);
+    g.scale(2*length,2*width);
+    g.globalCompositeOperation='destination-in';
+    const fade=g.createRadialGradient(0,0,0,0,0,1);
+    fade.addColorStop(0,'white');
+    fade.addColorStop(0.76,'white');
+    fade.addColorStop(1,'transparent');
+    g.fillStyle=fade;
+    g.fillRect(-16,-16,32,32);
+    g.restore();
+    ctx.drawImage(tile,x-extent,y-extent,68,68);
+  }
+  ctx.restore();
 }

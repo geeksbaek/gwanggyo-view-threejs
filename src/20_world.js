@@ -1319,13 +1319,32 @@ function buildCars() {
         const nl = Math.max(1, Math.floor(p.w / 6.8));
         laneOff = dir * (0.5 + Math.floor(rnd() * nl)) * 3.1;
       }
-      cars.push({ p, t: rnd() * p.L, dir, laneOff, v: (p.c >= 4 ? 13.5 : 9.2) * (0.8 + rnd() * 0.45), col: Math.floor(rnd() * 8) });
+      const t=(k+0.2+0.6*rnd())/n*p.L;
+      cars.push({p,t,dir,laneOff,v:p.c>=4 ? 13.5 : 9.2,rank:rnd(),col:Math.floor(rnd()*8)});
+    }
+  }
+  const junction=makeJunctionTraffic();
+  for (const lane of junction.lanes) {
+    lane.slots=[];
+    const capacity=Math.ceil(lane.path.L/6.4)+2;
+    for (let i=0;i<capacity;i++) {
+      const slot={p:lane.path,t:0,dir:1,laneOff:0,local:true,active:false,col:Math.floor(rnd()*8)};
+      cars.push(slot);
+      lane.slots.push(slot);
     }
   }
   const N = cars.length; WORLD.cars = cars;
   // Two-tier 3D vehicle silhouette (lower body + recessed upper cabin + wheels)
   const body = new THREE.BoxGeometry(1.86, 0.72, 4.55); body.translate(0, 0.54, 0);
-  const cab = new THREE.BoxGeometry(1.56, 0.56, 2.25); cab.translate(0, 1.15, -0.18);
+  const cab = new THREE.BoxGeometry(1.65,0.76,3.1);
+  const shell=cab.attributes.position;
+  for (let i=0;i<shell.count;i++) {
+    if (shell.getY(i)<0) continue;
+    shell.setX(i,shell.getX(i)*0.83);
+    shell.setZ(i,shell.getZ(i)*0.62);
+  }
+  cab.computeVertexNormals();
+  cab.translate(0,1.21,-0.12);
   const geo = mergeGeometries([body, cab]);
   const pal = [0xf2f2ef, 0x16181c, 0x7e8288, 0xe2e4e6, 0x2c323b, 0x6e1a1a, 0x1e3552, 0xb8b2a6].map(c => new THREE.Color(c));
   const mat = new THREE.ShaderMaterial({
@@ -1334,7 +1353,9 @@ function buildCars() {
     fragmentShader: `precision highp float; ${GLSL_COMMON} varying vec3 vW; varying vec3 vN; varying vec3 vC; varying vec3 vP;
       void main(){
         vec3 n=normalize(vN); vec3 V=normalize(uCamPos-vW);
-        float isCab=step(0.92, vP.y)*step(abs(n.y), 0.5);
+        // Sloped windscreens remain readable from an overhead apartment view.
+        float isCab=step(0.97,vP.y)*(1.0-step(0.96,n.y));
+        isCab*=smoothstep(0.04,0.09,abs(vP.z+0.12));
         vec3 alb=mix(vC, vec3(0.03,0.04,0.055), isCab);
         float sh=shadowAt(vW,0.002);
         vec3 col=lit(alb,n,sh,1.0);
@@ -1354,16 +1375,27 @@ function buildCars() {
   pm.vertexShader = pm.vertexShader.replace('vec3 stCol=mix(vec3(1.0,0.62,0.26),vec3(0.96,0.94,0.88),step(0.55,aS.x));', 'vec3 stCol=mix(vec3(1.0,0.06,0.03)*0.45,vec3(1.0,0.96,0.88)*1.5,aS.x);').replace('220.0', '150.0');
   const pts = new THREE.Points(pg, pm); pts.frustumCulled = false;
   const M = new THREE.Matrix4(), q = new THREE.Quaternion(), up = new THREE.Vector3(0, 1, 0), pos = new THREE.Vector3(), one = new THREE.Vector3(1, 1, 1), cam = new THREE.Vector3();
-  WORLD.updateCars = (dt, camera, traffic) => {
+  WORLD.updateCars = (dt, camera, demand) => {
+    junction.update(dt,S.doy,S.hour,S.playing,demand);
+    for (const lane of junction.lanes) {
+      for (const slot of lane.slots) slot.active=false;
+      for (const car of lane.queue) {
+        const slot=lane.slots[car.serial%lane.slots.length];
+        slot.active=true;
+        slot.t=car.t;
+      }
+    }
+    const elapsed=dt*(S.playing ? TRAFFIC_PLAYBACK_RATE : 1);
     const P = pg.attributes.position.array, A = pg.attributes.aS.array; camera.getWorldPosition(cam);
     for (let i = 0; i < N; i++) {
-      const c = cars[i], p = c.p; c.t += c.v * c.dir * dt; if (c.t > p.L) c.t -= p.L; if (c.t < 0) c.t += p.L;
-      const active = (i / N) < traffic && !p.tunnel;
+      const c=cars[i], p=c.p;
+      if (!c.local) c.t=(c.t+c.v*(1-0.29*demand)*c.dir*elapsed+p.L)%p.L;
+      const active=c.local ? c.active : c.rank<demand && !p.tunnel;
       let k = c.k || 1; if (k >= p.pts.length) k = 1; while (k < p.pts.length - 1 && p.pts[k][2] < c.t) k++; while (k > 1 && p.pts[k - 1][2] > c.t) k--; c.k = k;
       const a = p.pts[k - 1], b = p.pts[k], f = (c.t - a[2]) / Math.max(b[2] - a[2], 0.01); const dx = b[0] - a[0], dz = b[1] - a[1], L = Math.hypot(dx, dz) || 1;
       const nx = -dz / L, nz = dx / L;
       const x = lerp(a[0], b[0], f) + nx * c.laneOff, z = lerp(a[1], b[1], f) + nz * c.laneOff;
-      const y = active && !withinJunctionRoad(x,z) ? groundY(x, z) : -500;
+      const y = active && (c.local || !withinJunctionRoad(x,z)) ? groundY(x, z) : -500;
       pos.set(x, y, z); q.setFromAxisAngle(up, Math.atan2(dx * c.dir, dz * c.dir)); M.compose(pos, q, one); m.setMatrixAt(i, M);
       P[i * 3] = x; P[i * 3 + 1] = y + 0.72; P[i * 3 + 2] = z;
       A[i * 2] = ((cam.x - x) * dx + (cam.z - z) * dz) * c.dir > 0 ? 1 : 0;

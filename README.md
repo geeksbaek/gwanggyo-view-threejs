@@ -39,4 +39,6 @@ src/를 고친 뒤 `python3 build.py` → `gwanggyo-view.html`. `python3 build.p
 
 [조사 자료, 동별 층수표와 검증 오차](docs/site-research.md) · [도로·정류장 데이터](data/neighborhood.json)
 
-저장소 루트에서 `node tests/site.mjs`로 배치 및 도로 검증을 실행한다.
+시간·날씨 패널에서 ‘날짜’와 ‘시각’을 움직이면 주변 도로의 차량 수·속도와 정보과학고사거리 대기열이 바뀐다. ‘하루 재생’에서 시간에 따른 변화를 이어서 볼 수 있다.
+
+저장소 루트에서 `node tests/site.mjs`로 배치와 도로를, `node tests/traffic.mjs`로 시간대와 교차로 차량 동작을 검증한다.

@@ -77,6 +77,7 @@ input[type=range]::-moz-range-thumb{width:18px;height:18px;border-radius:50%;bac
       <p><a style="color:inherit" href="https://www.openstreetmap.org/copyright" target="_blank" rel="noopener">도로·정류장 © OpenStreetMap 기여자</a></p>
       <dl id="info">
         <dt>일출·일몰</dt><dd><span id="i-rise">–</span> · <span id="i-set">–</span></dd>
+        <dt>모의 교통량</dt><dd id="i-traffic">–</dd>
         <dt>해 위치</dt><dd id="i-sun">–</dd>
         <dt>거실 직사광</dt><dd id="i-liv">–</dd>
       </dl>
@@ -710,6 +711,7 @@ function junctionMarkings(satInner) {
   if (satInner) {
     const im=satInner.image, k=im.width/1800;
     ctx.drawImage(im,930*k,790*k,230*k,220*k,0,0,1150,1100);
+    clearPhotographedTraffic(ctx);
   }
   const paint = 'rgba(230,226,211,0.84)';
   function line(points, color, width, dash = []) {
@@ -888,6 +890,7 @@ async function loadJunctionPhoto(texture,frame) {
   try {
     await Promise.all(Array.from({length:4},worker));
     ctx.drawImage(mosaic.canvas,x0*256-origin[0],y0*256-origin[1]);
+    clearPhotographedTraffic(ctx);
     softenJunctionEdge(ctx);
     texture.image=ctx.canvas;
     texture.needsUpdate=true;
@@ -895,6 +898,51 @@ async function loadJunctionPhoto(texture,frame) {
   } catch {
     controller.abort(); // Keep the entire registered offline surface on failure.
   }
+}
+
+// Restore small vehicle-shaped areas of the registered source image using
+// adjacent pavement on the same lane. Coordinates are source trace pixels.
+function clearPhotographedTraffic(ctx) {
+  const patches=[
+    // centre, pavement sample offset, half length, half width, angle in degrees
+    [477,55,13,28,18,9,65],[543,204,-9,-24,17,9,72],[583,347,4,20,16,8,78],
+    [523,370,-2,-24,17,8,102],[514,397,-11,19,16,8,112],
+    [493,423,-17,8,17,8,141],[466,455,18,-14,17,9,132],
+    [508,453,23,-8,17,9,152],[597,432,8,-22,16,9,97],
+    [640,476,-21,9,17,9,85],[662,491,13,-12,15,8,99],[605,545,9,-24,17,9,106],
+    [796,457,25,0,17,8,0],[796,475,24,0,17,8,0],
+    [857,457,25,0,17,8,0],[859,474,25,0,17,8,0],
+    [432,621,-18,14,17,9,-39],[413,595,-22,16,18,9,-36],
+    [329,688,20,-18,17,9,-41],[211,709,20,-19,16,8,-46],
+    [249,576,22,-15,17,8,-37],[105,703,-30,31,29,9,-45],[18,790,19,-20,15,8,-47],
+    [604,650,-1,19,15,8,90],[625,679,0,25,14,8,89],[582,742,2,23,18,8,94],
+    [622,731,-1,21,17,9,94],[618,807,-1,28,17,8,92],[592,906,1,-22,17,8,93],
+    [573,951,1,-23,17,9,93],
+  ];
+  const tile=document.createElement('canvas');
+  tile.width=tile.height=136;
+  const g=tile.getContext('2d'), scale=ctx.canvas.width/1150;
+  ctx.save();
+  ctx.setTransform(scale,0,0,scale,0,0);
+  for (const [x,y,dx,dy,length,width,angle] of patches) {
+    const extent=34;
+    g.clearRect(0,0,136,136);
+    g.drawImage(ctx.canvas,(x+dx-extent)*scale,(y+dy-extent)*scale,68*scale,68*scale,0,0,136,136);
+    g.save();
+    g.translate(68,68);
+    g.rotate(angle*Math.PI/180);
+    g.scale(2*length,2*width);
+    g.globalCompositeOperation='destination-in';
+    const fade=g.createRadialGradient(0,0,0,0,0,1);
+    fade.addColorStop(0,'white');
+    fade.addColorStop(0.76,'white');
+    fade.addColorStop(1,'transparent');
+    g.fillStyle=fade;
+    g.fillRect(-16,-16,32,32);
+    g.restore();
+    ctx.drawImage(tile,x-extent,y-extent,68,68);
+  }
+  ctx.restore();
 }
 
 // ───────────── world outside the window: terrain, city, complex, trees, water, lights, traffic
@@ -2218,13 +2266,32 @@ function buildCars() {
         const nl = Math.max(1, Math.floor(p.w / 6.8));
         laneOff = dir * (0.5 + Math.floor(rnd() * nl)) * 3.1;
       }
-      cars.push({ p, t: rnd() * p.L, dir, laneOff, v: (p.c >= 4 ? 13.5 : 9.2) * (0.8 + rnd() * 0.45), col: Math.floor(rnd() * 8) });
+      const t=(k+0.2+0.6*rnd())/n*p.L;
+      cars.push({p,t,dir,laneOff,v:p.c>=4 ? 13.5 : 9.2,rank:rnd(),col:Math.floor(rnd()*8)});
+    }
+  }
+  const junction=makeJunctionTraffic();
+  for (const lane of junction.lanes) {
+    lane.slots=[];
+    const capacity=Math.ceil(lane.path.L/6.4)+2;
+    for (let i=0;i<capacity;i++) {
+      const slot={p:lane.path,t:0,dir:1,laneOff:0,local:true,active:false,col:Math.floor(rnd()*8)};
+      cars.push(slot);
+      lane.slots.push(slot);
     }
   }
   const N = cars.length; WORLD.cars = cars;
   // Two-tier 3D vehicle silhouette (lower body + recessed upper cabin + wheels)
   const body = new THREE.BoxGeometry(1.86, 0.72, 4.55); body.translate(0, 0.54, 0);
-  const cab = new THREE.BoxGeometry(1.56, 0.56, 2.25); cab.translate(0, 1.15, -0.18);
+  const cab = new THREE.BoxGeometry(1.65,0.76,3.1);
+  const shell=cab.attributes.position;
+  for (let i=0;i<shell.count;i++) {
+    if (shell.getY(i)<0) continue;
+    shell.setX(i,shell.getX(i)*0.83);
+    shell.setZ(i,shell.getZ(i)*0.62);
+  }
+  cab.computeVertexNormals();
+  cab.translate(0,1.21,-0.12);
   const geo = mergeGeometries([body, cab]);
   const pal = [0xf2f2ef, 0x16181c, 0x7e8288, 0xe2e4e6, 0x2c323b, 0x6e1a1a, 0x1e3552, 0xb8b2a6].map(c => new THREE.Color(c));
   const mat = new THREE.ShaderMaterial({
@@ -2233,7 +2300,9 @@ function buildCars() {
     fragmentShader: `precision highp float; ${GLSL_COMMON} varying vec3 vW; varying vec3 vN; varying vec3 vC; varying vec3 vP;
       void main(){
         vec3 n=normalize(vN); vec3 V=normalize(uCamPos-vW);
-        float isCab=step(0.92, vP.y)*step(abs(n.y), 0.5);
+        // Sloped windscreens remain readable from an overhead apartment view.
+        float isCab=step(0.97,vP.y)*(1.0-step(0.96,n.y));
+        isCab*=smoothstep(0.04,0.09,abs(vP.z+0.12));
         vec3 alb=mix(vC, vec3(0.03,0.04,0.055), isCab);
         float sh=shadowAt(vW,0.002);
         vec3 col=lit(alb,n,sh,1.0);
@@ -2253,16 +2322,27 @@ function buildCars() {
   pm.vertexShader = pm.vertexShader.replace('vec3 stCol=mix(vec3(1.0,0.62,0.26),vec3(0.96,0.94,0.88),step(0.55,aS.x));', 'vec3 stCol=mix(vec3(1.0,0.06,0.03)*0.45,vec3(1.0,0.96,0.88)*1.5,aS.x);').replace('220.0', '150.0');
   const pts = new THREE.Points(pg, pm); pts.frustumCulled = false;
   const M = new THREE.Matrix4(), q = new THREE.Quaternion(), up = new THREE.Vector3(0, 1, 0), pos = new THREE.Vector3(), one = new THREE.Vector3(1, 1, 1), cam = new THREE.Vector3();
-  WORLD.updateCars = (dt, camera, traffic) => {
+  WORLD.updateCars = (dt, camera, demand) => {
+    junction.update(dt,S.doy,S.hour,S.playing,demand);
+    for (const lane of junction.lanes) {
+      for (const slot of lane.slots) slot.active=false;
+      for (const car of lane.queue) {
+        const slot=lane.slots[car.serial%lane.slots.length];
+        slot.active=true;
+        slot.t=car.t;
+      }
+    }
+    const elapsed=dt*(S.playing ? TRAFFIC_PLAYBACK_RATE : 1);
     const P = pg.attributes.position.array, A = pg.attributes.aS.array; camera.getWorldPosition(cam);
     for (let i = 0; i < N; i++) {
-      const c = cars[i], p = c.p; c.t += c.v * c.dir * dt; if (c.t > p.L) c.t -= p.L; if (c.t < 0) c.t += p.L;
-      const active = (i / N) < traffic && !p.tunnel;
+      const c=cars[i], p=c.p;
+      if (!c.local) c.t=(c.t+c.v*(1-0.29*demand)*c.dir*elapsed+p.L)%p.L;
+      const active=c.local ? c.active : c.rank<demand && !p.tunnel;
       let k = c.k || 1; if (k >= p.pts.length) k = 1; while (k < p.pts.length - 1 && p.pts[k][2] < c.t) k++; while (k > 1 && p.pts[k - 1][2] > c.t) k--; c.k = k;
       const a = p.pts[k - 1], b = p.pts[k], f = (c.t - a[2]) / Math.max(b[2] - a[2], 0.01); const dx = b[0] - a[0], dz = b[1] - a[1], L = Math.hypot(dx, dz) || 1;
       const nx = -dz / L, nz = dx / L;
       const x = lerp(a[0], b[0], f) + nx * c.laneOff, z = lerp(a[1], b[1], f) + nz * c.laneOff;
-      const y = active && !withinJunctionRoad(x,z) ? groundY(x, z) : -500;
+      const y = active && (c.local || !withinJunctionRoad(x,z)) ? groundY(x, z) : -500;
       pos.set(x, y, z); q.setFromAxisAngle(up, Math.atan2(dx * c.dir, dz * c.dir)); M.compose(pos, q, one); m.setMatrixAt(i, M);
       P[i * 3] = x; P[i * 3 + 1] = y + 0.72; P[i * 3 + 2] = z;
       A[i * 2] = ((cam.x - x) * dx + (cam.z - z) * dz) * c.dir > 0 ? 1 : 0;
@@ -2292,6 +2372,124 @@ function renderShadow(renderer) {
   const old = renderer.getRenderTarget(); U.uShadowMap.value = null; renderer.setRenderTarget(SHADOW.rt); renderer.clear(); renderer.render(SHADOW.scene, c); renderer.setRenderTarget(old); U.uShadowMap.value = SHADOW.rt.depthTexture;
   for (const [m, mat] of saved) m.material = mat;
   SHADOW.scene.children.length = 0;
+}
+
+// Two-way counts by hour, GITS station 4302-03, 20–26 October 2025.
+// Monday–Friday mean, Saturday and Sunday, beginning at 00:00 KST.
+const HOURLY_TRAFFIC = [
+  [489, 362, 243, 269, 664, 2307, 4471, 5240, 5338, 4883, 4126, 3746, 3854, 4087, 4395, 4744, 5063, 4845, 4650, 3827, 2893, 1985, 1349, 764],
+  [668, 523, 327, 308, 471, 1314, 2084, 2866, 4369, 4369, 4081, 4800, 4392, 4417, 4754, 4716, 5167, 4549, 4151, 2664, 2106, 1653, 1085, 727],
+  [490, 339, 270, 198, 286, 640, 1054, 1563, 2094, 2565, 2997, 3362, 3572, 3809, 3831, 3791, 3903, 3602, 2908, 2501, 1977, 1528, 935, 511],
+];
+const PEAK_TRAFFIC = Math.max(...HOURLY_TRAFFIC.flat());
+const TRAFFIC_PLAYBACK_RATE = 12; // Vehicle motion in the 48-second day preview.
+const JANUARY_FIRST = new Date(Date.UTC(YEAR,0,1)).getUTCDay();
+
+// Each observation covers an hour. Interpolate between bin midpoints,
+// including the transition between Friday night and Saturday morning.
+function trafficDemand(doy,hour) {
+  const time=doy*24 + hour - 0.5, lower=Math.floor(time);
+  function count(t) {
+    const weekday=((JANUARY_FIRST+Math.floor(t/24))%7+7)%7;
+    const profile=HOURLY_TRAFFIC[weekday===0 ? 2 : weekday===6 ? 1 : 0];
+    return profile[(t%24+24)%24];
+  }
+  return lerp(count(lower),count(lower+1),time-lower)/PEAK_TRAFFIC;
+}
+
+// Through movements in the registered aerial frame. Gate indices denote
+// stop lines. Group 0 is the diagonal/east arm, group 1 the north/south arm.
+// Gate 2 controls the separate pedestrian crossing farther along the east arm.
+const JUNCTION_LANES = [
+  {weight:1.00, gates:[[4,0],[9,2]], points:[[0,1004],[121,860],[247,727],[340,649],[425,586],[490,545],[565,520],[640,508],[726,497],[982,497],[1150,497]]},
+  {weight:1.00, gates:[[1,2],[2,0]], points:[[1150,469],[1073,469],[788,469],[717,469],[627,476],[547,482],[461,497],[376,525],[286,586],[181,669],[88,754],[0,838]]},
+  {weight:0.85, gates:[[3,1]], points:[[464,0],[510,106],[543,216],[562,288],[575,348],[582,419],[581,493],[577,570],[574,639],[575,779],[559,1100]]},
+  {weight:0.85, gates:[[2,1]], points:[[625,1100],[640,800],[639,667],[638,595],[637,526],[637,471],[633,397],[627,341],[615,288],[577,136],[515,0]]},
+];
+
+function junctionGreen(time,group) {
+  const phase=time%92;
+  if (group===2) return (time+12)%92 < 69;
+  return group===0 ? phase<39 : phase>=49 && phase<82;
+}
+
+function makeJunctionTraffic() {
+  const lanes=JUNCTION_LANES.map(({points,gates,weight})=>{
+    let L=0;
+    const pts=points.map(([u,v],i)=>{
+      if (i) L+=Math.hypot(u-points[i-1][0],v-points[i-1][1])/5;
+      return [30+u/5,-110+v/5,L];
+    });
+    // Leave space on both sides of each striped field for the whole vehicle.
+    const keepClear=[];
+    for (const [a,b,c,d] of JUNCTION_CROSSWALKS) {
+      const polygon=[a,b,d,c];
+      let first=Infinity,last=-Infinity,segment=1;
+      for (let t=0;t<L;t+=0.5) {
+        while (segment<pts.length-1 && t>pts[segment][2]) segment++;
+        const from=pts[segment-1], to=pts[segment];
+        const f=(t-from[2])/(to[2]-from[2]);
+        if (!pip((lerp(from[0],to[0],f)-30)*5,(lerp(from[1],to[1],f)+110)*5,polygon)) continue;
+        first=Math.min(first,t);
+        last=t;
+      }
+      if (last>=first) keepClear.push({before:first-2.6,after:last+2.6});
+    }
+    return {path:{pts,L},keepClear,stops:gates.map(([i,group])=>({t:pts[i][2]-2.6,group})),weight,queue:[],next:0,serial:0};
+  });
+  let time=0, lastHour, lastDay;
+  function advance(dt,demand) {
+    time+=dt;
+    for (const lane of lanes) {
+      const queue=lane.queue;
+      const cruise=12.3-3.6*demand;
+      lane.next-=dt;
+      if (lane.next<=0 && (!queue.length || queue.at(-1).t>8)) {
+        const serial=lane.serial++;
+        queue.push({t:0,v:cruise,serial});
+        const variation=0.8+0.4*((serial*0.61803399+lane.weight)%1);
+        lane.next=variation*5.4/(Math.max(0.025,demand)*lane.weight);
+      }
+      let leader=Infinity;
+      for (const car of queue) {
+        let limit=leader-6.4;
+        for (const crossing of lane.keepClear) {
+          if (car.t<=crossing.before && limit<crossing.after) limit=Math.min(limit,crossing.before);
+        }
+        for (const stop of lane.stops) {
+          // A vehicle already past the stop line clears the junction.
+          if (car.t<=stop.t && !junctionGreen(time,stop.group)) limit=Math.min(limit,stop.t);
+        }
+        const gap=Math.max(0,limit-car.t);
+        const target=Math.min(cruise,Math.sqrt(2*2.4*gap),gap/0.9);
+        car.v=clamp(target,Math.max(0,car.v-3.8*dt),car.v+2.0*dt);
+        const travel=Math.min(gap,car.v*dt);
+        car.t+=travel;
+        if (travel===gap) car.v=0;
+        leader=car.t;
+      }
+      while (queue.length && queue[0].t>lane.path.L) queue.shift();
+    }
+  }
+  function update(dt,doy,hour,playing,demand) {
+    if (lastDay!==doy || (!playing && hour!==lastHour)) {
+      // Populate existing queues on first entry and when seeking to a time.
+      // Replay the same arrivals and phase when revisiting the same instant.
+      time=Math.floor(hour*3600);
+      for (const [i,lane] of lanes.entries()) {
+        lane.queue.length=0;
+        lane.serial=i*13;
+        lane.next=[1.2,4.3,2.7,6.1][i]/Math.max(0.025,demand);
+      }
+      for (let step=0;step<600;step++) advance(0.2,demand);
+    }
+    lastDay=doy;
+    lastHour=hour;
+    const elapsed=dt*(playing ? TRAFFIC_PLAYBACK_RATE : 1);
+    const steps=Math.max(1,Math.ceil(elapsed/0.1));
+    for (let i=0;i<steps;i++) advance(elapsed/steps,demand);
+  }
+  return {lanes,update};
 }
 
 // ───────────── authentic 광교 자연앤 센트레빌 architectural features, entrances, stairs, tunnels & 광교호수공원 landmarks
@@ -4654,6 +4852,8 @@ function updateInfo(a) {
   if (!$('info')) return;
   const dirs = ['북', '북동', '동', '남동', '남', '남서', '서', '북서'], az = (a.sun.az / RAD % 360 + 360) % 360;
   $('dateLab').textContent = fmtDate(S.doy); $('timeLab').textContent = fmtH(S.hour); $('clock').textContent = fmtDate(S.doy) + ' ' + fmtH(S.hour);
+  const weekday=(JANUARY_FIRST+S.doy)%7;
+  $('i-traffic').textContent=['일','월','화','수','목','금','토'][weekday]+'요일 · 기준 피크의 '+Math.round(100*trafficDemand(S.doy,S.hour))+'%';
   if (ENV.infoDoy !== S.doy) { ENV.infoDoy = S.doy; ENV.st = sunTimes(S.doy); }
   const st = ENV.st, lv = ENV.liv;
   $('i-rise').textContent = st.rise != null ? fmtH(st.rise / 60) : '–'; $('i-set').textContent = st.set != null ? fmtH(st.set / 60) : '–';
@@ -4870,7 +5070,7 @@ function tick(dt) {
     const ds = Math.max(dt, 0) * 1.5; d.t = SHOT ? want : clamp(d.t + clamp(want - d.t, -ds, ds), 0, 1); const e = d.t * d.t * (3 - 2 * d.t);
     if (d.rot !== undefined) d.mesh.rotation.y = d.rot * e; else d.mesh.position.set(d.px + d.sx * e, 0, d.pz + d.sz * e); }
   { const rl = view.drone ? '단지 전경' : (roomAt(view.pos.x, view.pos.z) || '집'); if (rl !== view.rl) { view.rl = rl; $('roomLab').textContent = rl; } drawMap(); }
-  WORLD.updateCars(dt, cam, clamp(0.25 + 0.75 * (1 - U.uLate.value) * (0.5 + 0.5 * sstep(5, 8, S.hour)), 0.1, 1));
+  WORLD.updateCars(dt, cam, trafficDemand(S.doy,S.hour));
   if (SHADOW.dirty) { renderShadow(renderer); SHADOW.dirty = false; }
   // exposure adaptation + interior balance
   const ea = SHOT ? 1 : 1 - Math.exp(-dt * 2.5); ENV.exp = Math.exp(lerp(Math.log(ENV.exp), Math.log(ENV.expTarget), ea));
