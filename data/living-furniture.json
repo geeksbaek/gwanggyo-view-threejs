@@ -1,0 +1,4 @@
+{
+  "sofa": {"x": 1.24, "z": 1.16, "depth": 0.90, "length": 2.26, "seatHeight": 0.43, "backHeight": 0.80},
+  "table": {"x": 0.23, "z": 2.05, "radius": 0.37, "height": 0.36}
+}

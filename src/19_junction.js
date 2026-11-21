@@ -52,12 +52,12 @@ function frontageTrafficPose(x,z,dx,dz,laneOffset,dir) {
   return null;
 }
 
-function prepareStreets(group,nightMap) {
+function prepareStreets(group,nightMap,asphalt) {
   // Base colours in linear space. All variation is evaluated in metres.
   const finishes={
-    mainDrive:[0.14,0.136,0.13],westDrive:[0.14,0.136,0.13],apron:[0.34,0.31,0.27],
+    mainDrive:[0.079,0.077,0.074],westDrive:[0.079,0.077,0.074],apron:[0.34,0.31,0.27],
     entranceWalk:[0.36,0.32,0.27],retaining:[0.34,0.32,0.30],
-    asphalt:[0.142,0.136,0.127], redAsphalt:[0.25,0.089,0.071],
+    asphalt:[0.078,0.075,0.072], redAsphalt:[0.25,0.089,0.071],
     sidewalk:[0.36,0.32,0.27], refuge:[0.41,0.34,0.26], granite:[0.44,0.43,0.40],
     curbFace:[0.31,0.30,0.28], garden:[0.105,0.145,0.065],
     white:[0.77,0.76,0.70], yellow:[0.84,0.56,0.105], blue:[0.075,0.33,0.44],
@@ -83,8 +83,8 @@ function prepareStreets(group,nightMap) {
     }
     if (['mainDrive','westDrive','apron'].includes(kind)) WORLD.entranceMeshes.push(mesh);
     mesh.material=new THREE.ShaderMaterial({
-      uniforms:{...U,uBase:{value:new THREE.Vector3(...finishes[kind])},uRoadNight:{value:nightMap}},
-      defines:{PAVERS:Number(['refuge','sidewalk','apron','entranceWalk'].includes(kind)),PAINT:Number(paint)},
+      uniforms:{...U,uBase:{value:new THREE.Vector3(...finishes[kind])},uRoadNight:{value:nightMap},uAsphalt:{value:asphalt}},
+      defines:{ASPHALT:Number(['asphalt','mainDrive','westDrive','redAsphalt'].includes(kind)),PAVERS:Number(['refuge','sidewalk','apron','entranceWalk'].includes(kind)),PAINT:Number(paint)},
       side:['curbFace','retaining'].includes(kind) ? THREE.DoubleSide : THREE.FrontSide,
       polygonOffset:true, polygonOffsetFactor:paint ? -2 : -1, polygonOffsetUnits:paint ? -3 : -1,
       vertexShader:`varying vec3 vW,vN;
@@ -92,13 +92,25 @@ function prepareStreets(group,nightMap) {
         gl_Position=projectionMatrix*viewMatrix*vec4(vW,1.);}`,
       fragmentShader:`precision highp float;
         ${GLSL_COMMON}
-        varying vec3 vW,vN; uniform vec3 uBase; uniform sampler2D uRoadNight;
+        varying vec3 vW,vN; uniform vec3 uBase; uniform sampler2D uRoadNight,uAsphalt;
         void main(){
           vec3 n=normalize(gl_FrontFacing?vN:-vN);
           float grain=texture2D(uNoise,vW.xz*1.8).r;
           float wear=texture2D(uNoise,vW.xz*0.004).g;
           float patina=texture2D(uNoise,vW.xz*0.0006).r;
           vec3 base=uBase*(0.58+0.30*wear+0.23*grain+0.18*patina);
+          float rough=0.78;
+          #if ASPHALT
+            // Packed scan: sRGB luminance, tangent-space XY and linear roughness.
+            vec4 scan=texture2D(uAsphalt,vec2(vW.x,-vW.z)/2.);
+            float reflectance=pow((scan.r+0.055)/1.055,2.4);
+            base=uBase*clamp(reflectance/0.17,0.38,2.4)*(0.89+0.20*wear);
+            vec3 T=normalize(vec3(1.,0.,0.)-n*n.x);
+            vec3 B=cross(n,T);
+            vec2 slope=(scan.gb*2.-1.)*(1.-uSnow)*0.65;
+            n=normalize(n*sqrt(max(0.03,1.-dot(slope,slope)))+slope.x*T+slope.y*B);
+            rough=clamp(scan.a,0.25,1.);
+          #endif
           #if PAVERS
             vec2 tile=vW.xz/vec2(0.44,0.22); tile.x+=0.5*mod(floor(tile.y),2.);
             vec2 uv=abs(fract(tile)-0.5);
@@ -111,7 +123,15 @@ function prepareStreets(group,nightMap) {
           base=mix(base*(1.-0.32*uWet),vec3(0.82,0.86,0.89),uSnow*max(n.y,0.)*0.93);
           vec3 V=normalize(uCamPos-vW), R=reflect(-V,n);
           vec3 col=lit(base,n,shadowAt(vW,0.0011),1.);
-          col+=uWet*sampleSky(vec3(R.x,max(R.y,0.02),R.z))*(0.03+0.37*pow(1.-max(dot(n,V),0.),5.));
+          col+=uWet*(1.25-0.47*rough)*sampleSky(vec3(R.x,max(R.y,0.02),R.z))*(0.03+0.37*pow(1.-max(dot(n,V),0.),5.));
+          #if ASPHALT
+            vec3 H=normalize(uLDir+V);
+            float ndh=max(dot(n,H),0.), ndl=max(dot(n,uLDir),0.);
+            float alpha=mix(rough*rough,0.09,uWet), a2=alpha*alpha;
+            float den=ndh*ndh*(a2-1.)+1.;
+            float D=a2/(3.14159*den*den);
+            col+=uLCol*uCloudShade*shadowAt(vW,0.0011)*ndl*D*0.025/(0.3+max(dot(n,V),0.)+ndl);
+          #endif
           col+=texture2D(uRoadNight,(vW.xz+2048.)/4096.).rgb*uNight*${(LAMP*0.42).toFixed(5)};
           gl_FragColor=vec4(col,1.);
         }`,

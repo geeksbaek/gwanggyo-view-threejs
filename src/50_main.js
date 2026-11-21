@@ -89,41 +89,42 @@ function updateEnv() {
   const se = season(S.doy); U.uLeaf.value = se.leaf; U.uBlossom.value = se.blossom; U.uFresh.value = se.fresh; U.uAutumn.value = se.autumn; U.uGrass.value = se.grass;
   // fog
   POST.fog.uniforms.uHaze.value = WX.haze; POST.fog.uniforms.uPrecip.value = WX.precip;
-  // ── interior light
-  const HU = HOME.uni, facing = skyIrradiance(0, 0, -1);
-  const cl = WX.cover * 0.5, cloudL = [L.r, L.g, L.b].map(v => v * 0.22 * Math.max(sd.y, 0.05) + 0);
-  const ws = [0, 1, 2].map(i => lerp(facing[i] / (PI / 2), cloudL[i] + up[i] / PI, cl * (1 - WX.over)));
-  HU.uWinSky.value.set(ws[0], ws[1], ws[2]);
-  const gE = [0, 1, 2].map(i => 0.2 * (up[i] + [L.r, L.g, L.b][i] * PI * Ly) / PI); HU.uWinGnd.value.set(gE[0], gE[1], gE[2]);
   ENV.lampOn = S.lights === 'on' || (S.lights === 'auto' && night > 0.35);
-  const LL = ENV.lampOn ? 0.42 : 0; HU.uLampL.value.set(LL, LL * 0.93, LL * 0.82);
-  for (let i = 0; i < 6; i++) HU.uLampOn.value[i] = ENV.lampOn ? 1 : 0;
-  const T = 0.74, rho = 0.62, lamps = HU.uLamp.value, LD = U.uLDir.value;
-  const sunIn = LD.z < -0.03 && LD.y > 0 ? 1 : 0;
-  HU.uSunIn.value.set(0, 0, 0);
-  ROOMS.forEach((r, i) => {
-    const w = r.win, A = (w[1] - w[0]) * (w[3] - w[2]), bx = r.box, fa = (bx[1] - bx[0]) * (bx[3] - bx[2]) * (i === 0 ? 0.9 : 1), per = 2 * ((bx[1] - bx[0]) + (bx[3] - bx[2]));
-    const Atot = 2 * fa + per * CEIL;
-    let blocked = 1; if (sunIn) blocked = sunBlocked((w[0] + w[1]) / 2, FY + 1.3, -0.2, LD) ? 0 : 1;
-    if (i === 0 && sunIn && blocked) HU.uSunIn.value.set(L.r * Ly, L.g * Ly, L.b * Ly);
-    const lampA = 4 * lamps[i].z * lamps[i].w + (i === 0 ? 4 * (lamps[4].z * lamps[4].w + lamps[5].z * lamps[5].w) : 0);
-    const amb = [0, 1, 2].map(c => {
-      const phi = (ws[c] + gE[c]) / 2 * PI * A * T + sunIn * blocked * [L.r, L.g, L.b][c] * PI * WX.shade * Math.max(-LD.z, 0) * A * T * 0.8 + [LL, LL * 0.93, LL * 0.82][c] * PI * lampA;
-      return phi * rho / (Atot * (1 - rho)) / PI;
-    });
-    HU.uRoomAmb.value[i].set(amb[0], amb[1], amb[2]);
-  });
-  const a0 = HU.uRoomAmb.value[0]; HU.uRoomAmb.value[4].set(a0.x * 0.5 + LL * 0.012, a0.y * 0.5 + LL * 0.011, a0.z * 0.5 + LL * 0.010);
   // exposure: luminous crisp daytime, smooth sunset/sunrise, rich night glow
   lutSample(_v.set(0, 0.08, -1).normalize(), _c); const skyH = lum(_c);
   const key = 0.48 * skyH + 0.24 * lum([L.r, L.g, L.b]) * Math.max(U.uLDir.value.y, 0.05) * WX.shade + 0.24 * lum(up) / PI;
   let e = 0.66 / Math.max(key, 1e-6);
-  const Lin = 0.06 * lum(ws) + lum([a0.x, a0.y, a0.z]) * 0.8 + (ENV.lampOn ? 0.012 : 0);
   const cap = ENV.lampOn ? 0.55 / 0.012 : 170; e = clamp(e, 0.14, view.drone ? 150 : cap);
-  ENV.expTarget = e; ENV.Lin = Lin;
-  { // camera-like white balance indoors (65 % toward neutral)
-    const c = [0, 1, 2].map(i => 0.06 * ws[i] + [a0.x, a0.y, a0.z][i] * 0.8 + (ENV.lampOn ? [0.012, 0.0112, 0.0098][i] : 0)); const g = lum(c) || 1;
-    HU.uWB.value.set(lerp(1, g / Math.max(c[0], 1e-9), 0.65), lerp(1, g / Math.max(c[1], 1e-9), 0.65), lerp(1, g / Math.max(c[2], 1e-9), 0.65)); }
+  ENV.expTarget = e;
+  if (HOME.uni) {
+    const HU = HOME.uni, facing = skyIrradiance(0, 0, -1);
+    const cl = WX.cover * 0.5, cloudL = [L.r, L.g, L.b].map(v => v * 0.22 * Math.max(sd.y, 0.05) + 0);
+    const ws = [0, 1, 2].map(i => lerp(facing[i] / (PI / 2), cloudL[i] + up[i] / PI, cl * (1 - WX.over)));
+    HU.uWinSky.value.set(ws[0], ws[1], ws[2]);
+    const gE = [0, 1, 2].map(i => 0.2 * (up[i] + [L.r, L.g, L.b][i] * PI * Ly) / PI); HU.uWinGnd.value.set(gE[0], gE[1], gE[2]);
+    const LL = ENV.lampOn ? 0.42 : 0; HU.uLampL.value.set(LL, LL * 0.93, LL * 0.82);
+    for (let i = 0; i < 6; i++) HU.uLampOn.value[i] = ENV.lampOn ? 1 : 0;
+    const T = 0.74, rho = 0.62, lamps = HU.uLamp.value, LD = U.uLDir.value;
+    const sunIn = LD.z < -0.03 && LD.y > 0 ? 1 : 0;
+    HU.uSunIn.value.set(0, 0, 0);
+    ROOMS.forEach((r, i) => {
+      const w = r.win, A = (w[1] - w[0]) * (w[3] - w[2]), bx = r.box, fa = (bx[1] - bx[0]) * (bx[3] - bx[2]) * (i === 0 ? 0.9 : 1), per = 2 * ((bx[1] - bx[0]) + (bx[3] - bx[2]));
+      const Atot = 2 * fa + per * CEIL;
+      let blocked = 1; if (sunIn) blocked = sunBlocked((w[0] + w[1]) / 2, FY + 1.3, -0.2, LD) ? 0 : 1;
+      if (i === 0 && sunIn && blocked) HU.uSunIn.value.set(L.r * Ly, L.g * Ly, L.b * Ly);
+      const lampA = 4 * lamps[i].z * lamps[i].w + (i === 0 ? 4 * (lamps[4].z * lamps[4].w + lamps[5].z * lamps[5].w) : 0);
+      const amb = [0, 1, 2].map(c => {
+        const phi = (ws[c] + gE[c]) / 2 * PI * A * T + sunIn * blocked * [L.r, L.g, L.b][c] * PI * WX.shade * Math.max(-LD.z, 0) * A * T * 0.8 + [LL, LL * 0.93, LL * 0.82][c] * PI * lampA;
+        return phi * rho / (Atot * (1 - rho)) / PI;
+      });
+      HU.uRoomAmb.value[i].set(amb[0], amb[1], amb[2]);
+    });
+    const a0 = HU.uRoomAmb.value[0]; HU.uRoomAmb.value[4].set(a0.x * 0.5 + LL * 0.012, a0.y * 0.5 + LL * 0.011, a0.z * 0.5 + LL * 0.010);
+    ENV.Lin = 0.06 * lum(ws) + lum([a0.x, a0.y, a0.z]) * 0.8 + (ENV.lampOn ? 0.012 : 0);
+    { // camera-like white balance indoors (65 % toward neutral)
+      const c = [0, 1, 2].map(i => 0.06 * ws[i] + [a0.x, a0.y, a0.z][i] * 0.8 + (ENV.lampOn ? [0.012, 0.0112, 0.0098][i] : 0)); const g = lum(c) || 1;
+      HU.uWB.value.set(lerp(1, g / Math.max(c[0], 1e-9), 0.65), lerp(1, g / Math.max(c[1], 1e-9), 0.65), lerp(1, g / Math.max(c[2], 1e-9), 0.65)); }
+  }
   SHADOW.dirty = true; ENV.dirty = false;
   if (!ENV.last || ENV.last !== S.doy) { ENV.last = S.doy; ENV.liv = livingSun(S.doy); }
   updateInfo(a);
@@ -197,6 +198,8 @@ function goView(name, instant) {
   const street=name==='street';
   const gate=name==='main-gate' ? WORLD.gates.main : name==='west-gate' ? WORLD.gates.west : null;
   view.drone=!!gate || street || name==='drone';
+  if (view.drone && HOME.group) releaseHome();
+  if (!view.drone && !HOME.group) homeScene.add(buildHome(HOME.floorLight));
   if (!view.drone && !VIEWS[name]) name='living';
   S.room=name; const v=VIEWS[name];
   if (!view.drone) { view.tpos.set(v.p[0], FY + EYE, v.p[1]); view.tyaw = v.yaw; view.tpitch = v.pitch; view.tfov = 62; if (instant) { view.pos.copy(view.tpos); view.yaw = view.tyaw; view.pitch = view.tpitch; } }
@@ -334,6 +337,7 @@ function setupUI() {
 }
 
 function tick(dt) {
+  renderer.info.reset();
   U.uTime.value += dt;
   if (S.playing) { S.hour += dt * 24 / 48; if (S.hour >= 24) { S.hour -= 24; } $('hr').value = S.hour; ENV.dirty = true; }
   // weather easing
@@ -387,19 +391,24 @@ function tick(dt) {
   if (SHADOW.dirty) { renderShadow(renderer); SHADOW.dirty = false; }
   // exposure adaptation + interior balance
   const ea = SHOT ? 1 : 1 - Math.exp(-dt * 2.5); ENV.exp = Math.exp(lerp(Math.log(ENV.exp), Math.log(ENV.expTarget), ea));
-  const HU = HOME.uni; HU.uBoost.value = clamp(0.54 / (ENV.exp * Math.max(ENV.Lin, 1e-7)), 1, 40); HU.uBoostSun.value = Math.min(HU.uBoost.value, 1.7);
+  const HU = HOME.uni; if (HU) { HU.uBoost.value = clamp(0.54 / (ENV.exp * Math.max(ENV.Lin, 1e-7)), 1, 40); HU.uBoostSun.value = Math.min(HU.uBoost.value, 1.7); }
   WORLD.lamps.material.uniforms.uPx.value = renderer.domElement.height / (2 * Math.tan(cam.fov * RAD / 2)) / 500;
   renderFrame(renderer, extScene, homeScene, cam, !view.drone, ENV.exp);
 }
 
 async function boot() {
   const cv = $('cv'); renderer = new THREE.WebGLRenderer({ canvas: cv, antialias: false, powerPreference: 'high-performance' });
+  renderer.info.autoReset=false;
   let dpr = Math.min(devicePixelRatio || 1, SHOT ? 1 : 1.75); renderer.setPixelRatio(dpr);
   const size = () => [cv.clientWidth || innerWidth, cv.clientHeight || innerHeight]; let [w, h] = size(); renderer.setSize(w, h, false);
   const prog = (p, t) => { $('bar').style.width = Math.round(p * 100) + '%'; if (t) $('loadmsg').textContent = t; };
   prog(0.05, '지형과 도시 자료를 불러오는 중');
   await loadWorld(); W.site = SITE_OUTLINE.map(p=>planPoint(...p)); demN = arr('dem_n'); demF = arr('dem_f'); U.uHF.value = W.HF;
-  const [satN, satF, paint, satIn, streets] = await Promise.all([loadTex('sat_near.jpg'), loadTex('sat_far.jpg'), loadTex('roadpaint.png', true).catch(() => null), loadTex('sat_inner.jpg').catch(() => null),new GLTFLoader().loadAsync('data/streets.glb')]); HAS_PAINT = !!paint; if (paint) { paint.flipY = false; paint.needsUpdate = true; paint.generateMipmaps = true; paint.minFilter = THREE.LinearMipmapLinearFilter; paint.anisotropy = 16; } if (satIn) { satIn.flipY = false; satIn.needsUpdate = true; } prog(0.45, '지형을 세우는 중');
+  const basisPath=new URL('../libs/basis/',import.meta.resolve('three/addons/loaders/KTX2Loader.js')).href;
+  const ktx=new KTX2Loader().setTranscoderPath(basisPath).setWorkerLimit(1).detectSupport(renderer);
+  const pavement=ktx.loadAsync('data/asphalt.ktx2').catch(()=>loadTex('data/asphalt.webp',false)).finally(()=>ktx.dispose());
+  const [satN, satF, paint, satIn, streets, asphalt, floorLight] = await Promise.all([loadTex('sat_near.jpg'), loadTex('sat_far.jpg'), loadTex('roadpaint.png', true).catch(() => null), loadTex('sat_inner.jpg').catch(() => null),new GLTFLoader().setMeshoptDecoder(MeshoptDecoder).loadAsync('data/streets.meshopt.glb'),
+    pavement,loadTex('data/floor-light.png',false)]); HAS_PAINT = !!paint; if (paint) { paint.flipY = false; paint.needsUpdate = true; paint.generateMipmaps = true; paint.minFilter = THREE.LinearMipmapLinearFilter; paint.anisotropy = 16; } if (satIn) { satIn.flipY = false; satIn.needsUpdate = true; } prog(0.45, '지형을 세우는 중');
   U.uNoise.value = makeNoiseTex(256);
   cam = new THREE.PerspectiveCamera(62, w / h, 0.05, 160000); cam.rotation.order = 'YXZ';
   extScene = new THREE.Scene(); homeScene = new THREE.Scene();
@@ -407,7 +416,9 @@ async function boot() {
   await new Promise(r => setTimeout(r, 20));
   const nightMap=paintNightMap();
   extScene.add(buildTerrain(satN, satF, paintDetail(), nightMap, paint, satIn));
-  extScene.add(prepareStreets(streets.scene,nightMap)); prog(0.6, '건물 1만 9천 동을 올리는 중'); await new Promise(r => setTimeout(r, 20));
+  asphalt.wrapS=asphalt.wrapT=THREE.RepeatWrapping;
+  asphalt.anisotropy=Math.min(8,renderer.capabilities.getMaxAnisotropy());
+  extScene.add(prepareStreets(streets.scene,nightMap,asphalt)); prog(0.6, '건물 1만 9천 동을 올리는 중'); await new Promise(r => setTimeout(r, 20));
   extScene.add(buildCity()); extScene.add(buildTowers()); extScene.add(buildComplexFeatures()); initPick(); prog(0.75, '나무와 주변 환경을 꾸미는 중'); await new Promise(r => setTimeout(r, 20));
   extScene.add(buildTrees()); extScene.add(buildWater()); extScene.add(buildLamps()); extScene.add(buildWorldProps()); extScene.add(buildCars());
   precip = buildPrecip(); extScene.add(precip);
@@ -419,12 +430,12 @@ async function boot() {
     const g = new THREE.BufferGeometry(); g.setAttribute('position', new THREE.Float32BufferAttribute(P, 3));
     const e = new THREE.LineSegments(g, new THREE.LineBasicMaterial({ color: 0xffc866 })); e.material.color.multiplyScalar(40); e.frustumCulled = false; marker = e; marker.visible = false; extScene.add(e); }
   prog(0.9, '집 안을 꾸미는 중'); await new Promise(r => setTimeout(r, 20));
-  homeScene.add(buildHome());
+  HOME.floorLight = floorLight;
   setupUI(); goView(QS.get('view') || 'living', true);
   addEventListener('resize', () => { const [w, h] = size(); renderer.setSize(w, h, false); cam.aspect = w / h; resizePost(Math.round(w * dpr), Math.round(h * dpr)); });
   Object.assign(WX, WEATHER[S.weather]); updateEnv(); ENV.exp = ENV.expTarget;
   prog(1, ''); $('load').classList.add('done'); if (SHOT) $('load').hidden = true; else setTimeout(() => { $('load').hidden = true; }, 900);
-  window.__doors = HOME.doors; window.__gg = { S, view, ENV, WX, goView, frame: (n = 1, dt = 0.016) => { for (let i = 0; i < n; i++) tick(dt); }, set: (o) => { Object.assign(S, o); if (o.weather) Object.assign(WX, WEATHER[o.weather]); ENV.dirty = true; }, info: () => ({ tris: renderer.info.render.triangles, calls: renderer.info.render.calls, trees: WORLD.treeTris }) };
+  window.__doors = HOME.doors; window.__gg = { S, view, ENV, WX, goView, frame: (n = 1, dt = 0.016) => { for (let i = 0; i < n; i++) tick(dt); }, set: (o) => { Object.assign(S, o); if (o.weather) Object.assign(WX, WEATHER[o.weather]); ENV.dirty = true; }, info: () => ({ tris: renderer.info.render.triangles, calls: renderer.info.render.calls, indoorLoaded: !!HOME.group, compressedAsphalt: !!asphalt.isCompressedTexture, trees: WORLD.treeTris }) };
   if (SHOT) return;
   let last = performance.now();
   // keep it fluid on slower GPUs: step the render resolution down while frames stay long

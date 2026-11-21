@@ -21,7 +21,7 @@ ${GLSL_COMMON}
 varying vec3 vW; varying vec3 vN; varying float vM;
 uniform vec4 uWin[4]; uniform vec4 uRoom[4]; uniform vec3 uRoomAmb[5]; uniform vec4 uLamp[6]; uniform float uLampOn[6];
 uniform vec3 uWinSky, uWinGnd, uLampL, uWB; uniform float uFY, uCeil, uBoost, uBoostSun, uGlassT;
-uniform vec3 uDL[15]; uniform vec3 uSunIn; uniform sampler2D uWood, uMarble;
+uniform vec3 uDL[15]; uniform vec3 uSunIn; uniform sampler2D uFloorLight, uWood, uMarble;
 uniform vec3 uOccA[${NOCC}]; uniform vec3 uOccB[${NOCC}]; uniform int uNOcc;
 vec3 lutDir(vec3 d){ float az=atan(d.z,d.x); float el=asin(clamp(d.y,-1.0,1.0)); float s=sign(el)*sqrt(abs(el)/1.5707963); return texture2D(uSkyLUT, vec2(az/6.2831853+0.5, s*0.5+0.5)).rgb; }
 float edgeI(vec3 a, vec3 b, vec3 n){ float c=clamp(dot(a,b),-0.99999,0.99999); vec3 cr=cross(a,b); float l=length(cr); return l<1e-6?0.0:acos(c)*dot(cr,n)/l; }
@@ -168,6 +168,14 @@ void main(){
     amb=(uRoomAmb[3]*0.5+uRoomAmb[0]*0.5)*vec3(1.0,0.98,0.95)*dao*(0.8+0.2*n.y)*1.7; }   // windowless rooms: their own lights are on
   if(n.y>0.5) amb*=vec3(1.34,1.30,1.22);                        // floors and counters see the white ceiling and walls
   if(n.y<-0.5) amb*=mix(vec3(1.10,1.02,0.90)*1.12,vec3(1.75,1.72,1.66),step(0.5,uLampOn[0]));                 // ceilings are lit by the oak floor
+  // Diffuse-only Cycles transport for the static floor, separate from live direct sun.
+  if(n.y>0.98 && P.y-uFY<0.025 && (m==3 || m==4 || m==30 || m==31)){
+    vec3 bake=texture2D(uFloorLight,vec2((P.x+3.)/16.,1.-P.z/10.)).rgb;
+    vec3 bounce=(0.5*(uWinSky+uWinGnd)*uGlassT*bake.r*bake.r + uLampL*bake.g*bake.g);
+    amb=mix(amb,bounce,0.62)*mix(0.68,1.,bake.b);
+    E*=mix(0.44,1.,bake.b);
+    El*=mix(0.52,1.,bake.b);
+  }
   // direct sun
   float ndl=max(dot(n,uLDir),0.0); float sv=(ndl>0.0&&!encl)?sunVis(P+n*0.004):0.0;
   vec3 sun=uLCol*uCloudShade*ndl*sv*uGlassT;
@@ -253,8 +261,8 @@ function paintMarble() {     // warm-white porcelain slab with soft clouding and
   for (let i = 0; i < 9; i++) vein(rnd() * N, rnd() * N, rnd() * 6.283, 40 + rnd() * 70, 0.5 + rnd() * 0.9, 0.22 + rnd() * 0.25);
   const t = new THREE.CanvasTexture(c); t.colorSpace = THREE.SRGBColorSpace; t.wrapS = t.wrapT = THREE.RepeatWrapping; t.anisotropy = 8; t.generateMipmaps = true; t.minFilter = THREE.LinearMipmapLinearFilter; return t;
 }
-function buildHome() {
-  const B = new HomeBuf(), M = MAT, H = CEIL, grp = new THREE.Group(), GQ = [];
+function buildHomeGeometry() {
+  const B = new HomeBuf(), M = MAT, H = CEIL, GQ = [];
   const cl = (v, a, b) => Math.min(b, Math.max(a, v));
   const wall = (x0, x1, z0, z1, y0 = 0, y1 = H, occ = true) => { B.box(x0, x1, y0, y1, z0, z1, M.WALL, occ); if (y0 === 0) HOME.walls.push([x0, x1, z0, z1, y1]);
     const a = cl(x0 - 0.007, -2.64, 12.32), b = cl(x1 + 0.007, -2.64, 12.32), c = cl(z0 - 0.007, 0.001, 9.9), d = cl(z1 + 0.007, 0.001, 9.9);
@@ -439,6 +447,28 @@ function buildHome() {
   B.box(5.34, 6.98, 0, H, 3.22, 3.85, M.CAB, true); seams('x', 5.34, 6.98, 4, 0.08, H - 0.03, 3.22, -1); hseam('x', 5.34, 6.98, 0.08, 3.22, -1); hseam('x', 5.34, 6.98, 1.95, 3.22, -1);
   // outdoor-unit room door (louvred) on the balcony
   B.box(10.335, 10.36, 0, 2.0, 0.42, 1.22, M.DOOR); for (let y = 0.2; y < 1.9; y += 0.06) B.box(10.33, 10.336, y, y + 0.03, 0.5, 1.14, M.FRAME); B.box(10.31, 10.335, 0.98, 1.0, 0.47, 0.57, M.STEEL);
+  // Illustrative living-room arrangement, in metres relative to the finished floor.
+  const sofa=LIVING_FURNITURE.sofa, table=LIVING_FURNITURE.table;
+  const {x,z,depth,length,seatHeight,backHeight}=sofa;
+  const right=x+depth, end=z+length;
+  for (const px of [x+0.10,right-0.10]) for (const pz of [z+0.14,end-0.14])
+    B.cyl(px,pz,0.027,0,0.14,M.WALNUT,12);
+  B.rbox(x,right,0.12,0.29,z,end,M.SOFA,0.055,true);
+  for (let i=0;i<2;i++) {
+    const a=z+0.12+i*(length-0.24)/2,b=a+(length-0.24)/2-0.009;
+    B.rbox(x+0.012,right-0.14,0.285,seatHeight,a,b,M.SOFA,0.062);
+    B.rbox(right-0.19,right,0.29,backHeight,a,b,M.SOFA,0.075);
+  }
+  for (const pz of [z,end-0.12]) B.rbox(x,right,0.25,0.59,pz,pz+0.12,M.SOFA,0.055);
+  HOME.solid.push([x,right,z,end]);
+  const rim=new THREE.LatheGeometry([[0,0],[table.radius-0.008,0],[table.radius,0.007],
+    [table.radius,0.026],[table.radius-0.008,0.033],[0,0.033]].map(p=>new THREE.Vector2(...p)),48);
+  rim.translate(table.x,FY+table.height-0.033,table.z); B.geo(rim,M.WALNUT);
+  for (let i=0;i<3;i++) {
+    const a=2*Math.PI*i/3;
+    B.cyl(table.x+0.23*Math.cos(a),table.z+0.23*Math.sin(a),0.028,0,table.height-0.033,M.WALNUT);
+  }
+  HOME.solid.push([table.x-table.radius,table.x+table.radius,table.z-table.radius,table.z+table.radius]);
   // ── kitchen
   B.box(-1.17, 0.98, 0.1, 0.86, 8.85, 9.45, M.WOODCAB, true); B.box(1.72, 2.76, 0.1, 0.86, 8.85, 9.45, M.WOODCAB); B.box(0.98, 1.72, 0.1, 0.69, 8.85, 9.45, M.WOODCAB); B.box(0.98, 1.72, 0.69, 0.86, 8.85, 8.966, M.WOODCAB); B.box(0.98, 1.72, 0.69, 0.86, 9.374, 9.45, M.WOODCAB);
   B.box(-1.17, 2.76, 0, 0.1, 8.92, 9.45, M.BLACK);
@@ -508,8 +538,13 @@ function buildHome() {
   // glass balustrade top rails (living room & balcony)
   B.box(-1.83, 1.80, 1.155, 1.17, 0.025, 0.045, M.STEEL); B.box(8.77, 10.28, 1.155, 1.17, 0.025, 0.045, M.STEEL);
 
+  return {geometry:B.build(), lamps, GQ};
+}
+
+function buildHome(floorLight) {
+  const {geometry,lamps,GQ}=buildHomeGeometry(), grp=new THREE.Group();
   const U2 = {
-    ...U, uWin: { value: ROOMS.map(r => new THREE.Vector4(...r.win)) }, uRoom: { value: ROOMS.map(r => new THREE.Vector4(...r.box)) },
+    ...U, uFloorLight:{value:floorLight}, uWin: { value: ROOMS.map(r => new THREE.Vector4(...r.win)) }, uRoom: { value: ROOMS.map(r => new THREE.Vector4(...r.box)) },
     uRoomAmb: { value: [0, 1, 2, 3, 4].map(() => new THREE.Vector3()) }, uLamp: { value: lamps.map(l => new THREE.Vector4(...l)) }, uLampOn: { value: [0, 0, 0, 0, 0, 0] }, uDL: { value: DOWNLIGHTS.map(([x, z]) => new THREE.Vector3(x, FY + CEIL - ((z > 4.45 && z < 5.05 && Math.abs(x) < 2.25) ? 0.10 : 0) - 0.01, z)) },
     uWinSky: { value: new THREE.Vector3() }, uWinGnd: { value: new THREE.Vector3() }, uLampL: { value: new THREE.Vector3() }, uFY: { value: FY }, uCeil: { value: CEIL }, uBoost: { value: 1 }, uBoostSun: { value: 1 }, uGlassT: { value: 0.74 }, uWB: { value: new THREE.Vector3(1, 1, 1) },
     uSunIn: { value: new THREE.Vector3() }, uWood: { value: paintWood() }, uMarble: { value: paintMarble() },
@@ -520,7 +555,7 @@ function buildHome() {
   if (HOME.occ.length > NOCC) console.warn('occluders', HOME.occ.length);
   HOME.uni = U2;
   const mat = new THREE.ShaderMaterial({ uniforms: U2, vertexShader: HOME_VS, fragmentShader: HOME_FS, side: THREE.DoubleSide });
-  const mesh = new THREE.Mesh(B.build(), mat); mesh.frustumCulled = false; grp.add(mesh);
+  const mesh = new THREE.Mesh(geometry, mat); mesh.frustumCulled = false; grp.add(mesh);
 
   // glass panes (blended): reflection of the room + faint tint
   const gp = [], gi = []; let nv = 0;
@@ -543,9 +578,23 @@ function buildHome() {
         gl_FragColor=vec4(col,a); }`,
   });
   const glass = new THREE.Mesh(gg, gmat); glass.frustumCulled = false; glass.renderOrder = 10; grp.add(glass);
-  for (const d of HOME.doors) { d.mesh.material = mat; grp.add(d.mesh);
+  for (const d of HOME.doors) { d.mesh.material.dispose(); d.mesh.material = mat; grp.add(d.mesh);
     if (d.glass) { const p = [], ix = []; d.glass.forEach((q, k) => { for (const v of q) p.push(v[0] - d.px, FY + v[1], v[2] - d.pz); ix.push(k * 4, k * 4 + 1, k * 4 + 2, k * 4, k * 4 + 2, k * 4 + 3); });
       const g2 = new THREE.BufferGeometry(); g2.setAttribute('position', new THREE.BufferAttribute(new Float32Array(p), 3)); g2.setIndex(ix); const gm = new THREE.Mesh(g2, gmat); gm.frustumCulled = false; gm.renderOrder = 10; d.mesh.add(gm); } }
   HOME.group = grp; HOME.mesh = mesh;
   return grp;
+}
+
+function releaseHome() {
+  const materials = new Set();
+  HOME.group.traverse(mesh => {
+    if (mesh.geometry) mesh.geometry.dispose();
+    if (mesh.material) materials.add(mesh.material);
+  });
+  for (const material of materials) material.dispose();
+  HOME.uni.uWood.value.dispose();
+  HOME.uni.uMarble.value.dispose();
+  HOME.group.removeFromParent();
+  HOME.group = HOME.mesh = HOME.uni = null;
+  for (const items of [HOME.occ, HOME.solid, HOME.walls, HOME.doors]) items.length = 0;
 }

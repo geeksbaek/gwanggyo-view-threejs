@@ -707,12 +707,15 @@ const depthMat = new THREE.ShaderMaterial({ vertexShader: DEPTH_VS, fragmentShad
 function buildCity() {
   const off = arr('b_off'), xy = arr('b_xy'), bh = arr('b_h'), bb = arr('b_base'), bk = arr('b_kind');
   const bc = W.idx.b_comp ? arr('b_comp') : null;
-  const N = bh.length; const nearB = new GeoBuf(), farB = new GeoBuf();
+  const N = bh.length; const tiles=new Map();
   WORLD.beacons = []; // aviation obstruction lights on tall surrounding towers
   for (let i = 0; i < N; i++) {
     const pts = []; for (let v = off[i]; v < off[i + 1]; v++) pts.push([xy[v * 2] / 4, xy[v * 2 + 1] / 4]);
     if (pts.length < 3) continue;
-    const d = Math.hypot(pts[0][0], pts[0][1]); const G = d < 850 ? nearB : farB;
+    const d = Math.hypot(pts[0][0], pts[0][1]); const near=d<850, cell=near ? 450 : 1600;
+    const key=[near,Math.floor(pts[0][0]/cell),Math.floor(pts[0][1]/cell)].join('/');
+    if (!tiles.has(key)) tiles.set(key,{geometry:new GeoBuf(),near});
+    const G=tiles.get(key).geometry;
     let y0 = bb[i] / 10 - 0.5, h = bh[i] / 10; const kind = bk[i];
     // Cohesive complex seed so every dong in the same apartment complex shares its unified architectural style!
     const compId = bc ? bc[i] : 0;
@@ -742,8 +745,13 @@ function buildCity() {
     if (h > 65 && d < 3500) WORLD.beacons.push(cx, yTop + 4.8, cz);
   }
   const mat = facadeMat(); const g = new THREE.Group();
-  const mn = new THREE.Mesh(nearB.build(), mat), mf = new THREE.Mesh(farB.build(), mat); mn.frustumCulled = mf.frustumCulled = false;
-  g.add(mn, mf); WORLD.casters.push({ mesh: mn, mat: depthMat });
+  for (const tile of tiles.values()) {
+    const geometry=tile.geometry.build();
+    geometry.computeBoundingSphere();
+    const mesh=new THREE.Mesh(geometry,mat);
+    g.add(mesh);
+    if (tile.near) WORLD.casters.push({mesh,mat:depthMat});
+  }
   return g;
 }
 
@@ -1100,18 +1108,40 @@ function buildTrees() {
   }
   const grp = new THREE.Group(); let tris = 0;
   const leafTex = paintLeaves();
-  const mk = (geo, list, inner = 1) => {
-    const n = list.length / 6; if (!n) return;
-    const ig = new THREE.InstancedBufferGeometry(); ig.index = geo.index; ig.setAttribute('position', geo.attributes.position); ig.setAttribute('normal', geo.attributes.normal);
-    const aT = new Float32Array(n * 4), aK = new Float32Array(n * 2);
-    for (let i = 0; i < n; i++) { aT.set(list.slice(i * 6, i * 6 + 4), i * 4); aK[i * 2] = list[i * 6 + 4]; aK[i * 2 + 1] = list[i * 6 + 5]; }
-    ig.setAttribute('aT', new THREE.InstancedBufferAttribute(aT, 4)); ig.setAttribute('aK', new THREE.InstancedBufferAttribute(aK, 2)); ig.instanceCount = n;
-    if (geo.attributes.aC) ig.setAttribute('aC', geo.attributes.aC);
+  const mk = (geo, list, tileSize, inner = 1) => {
+    const tiles = new Map(), meshes = [];
     const card = !!geo.attributes.aC;
     const mat = new THREE.ShaderMaterial({ uniforms: { ...U, uDepthOnly: { value: 0 }, uInner: { value: inner }, uLeafTex: { value: leafTex } }, vertexShader: TREE_VS, fragmentShader: TREE_FS, defines: card ? { CARD: 1 } : {}, side: card ? THREE.DoubleSide : THREE.FrontSide });
-    const m = new THREE.Mesh(ig, mat); m.frustumCulled = false; grp.add(m);
-    tris += n * (geo.index ? geo.index.count : geo.attributes.position.count) / 3;
-    return m;
+    for (let i = 0; i < list.length; i += 6) {
+      const key = Math.floor(list[i] / tileSize) + ',' + Math.floor(list[i + 2] / tileSize);
+      if (!tiles.has(key)) tiles.set(key, []);
+      tiles.get(key).push(i);
+    }
+    geo.computeBoundingSphere();
+    const localExtent = geo.boundingSphere.radius + geo.boundingSphere.center.length();
+    for (const indices of tiles.values()) {
+      const ig = new THREE.InstancedBufferGeometry();
+      ig.index = geo.index;
+      for (const name of Object.keys(geo.attributes)) ig.setAttribute(name, geo.attributes[name]);
+      const bounds = new THREE.Box3(), corner = new THREE.Vector3();
+      const aT = new Float32Array(indices.length * 4), aK = new Float32Array(indices.length * 2);
+      indices.forEach((i, n) => {
+        const [x, y, z, scale, kind, seed] = list.slice(i, i + 6);
+        aT.set([x, y, z, scale], n * 4); aK.set([kind, seed], n * 2);
+        // Bounds include the shader's anisotropic crown, trunk lift and wind displacement.
+        const r = localExtent * scale * 1.5 + 0.5;
+        bounds.expandByPoint(corner.set(x-r, y-r, z-r));
+        bounds.expandByPoint(corner.set(x+r, y+r+1.6*scale, z+r));
+      });
+      ig.setAttribute('aT', new THREE.InstancedBufferAttribute(aT, 4));
+      ig.setAttribute('aK', new THREE.InstancedBufferAttribute(aK, 2));
+      ig.instanceCount = indices.length;
+      ig.boundingSphere = bounds.getBoundingSphere(new THREE.Sphere());
+      const mesh = new THREE.Mesh(ig, mat);
+      grp.add(mesh); meshes.push(mesh);
+    }
+    tris += list.length / 6 * (geo.index ? geo.index.count : geo.attributes.position.count) / 3;
+    return meshes;
   };
 
   // Instanced 3D tapered bark trunks + upper fork branches so near/mid trees are grounded!
@@ -1143,16 +1173,16 @@ function buildTrees() {
   }
 
   const dm = new THREE.ShaderMaterial({ uniforms: { ...U, uDepthOnly: { value: 1 }, uInner: { value: 0.92 } }, vertexShader: TREE_VS, fragmentShader: TREE_FS, side: THREE.DoubleSide });
-  const a = mk(blobGeo(1, 11, 4, false), sets.hiB, 0.74), b = mk(blobGeo(1, 23, 3, true), sets.hiC, 0.78);
-  mk(cardGeo(64, 311, 4, 0.36), sets.hiB); mk(cardGeo(44, 323, 3, 0.32), sets.hiC);
-  mk(blobGeo(0, 5, 1, false), sets.loB); mk(blobGeo(0, 7, 1, true), sets.loC);
+  const a = mk(blobGeo(1, 11, 4, false), sets.hiB, 225, 0.74), b = mk(blobGeo(1, 23, 3, true), sets.hiC, 225, 0.78);
+  mk(cardGeo(64, 311, 4, 0.36), sets.hiB, 225); mk(cardGeo(44, 323, 3, 0.32), sets.hiC, 225);
+  mk(blobGeo(0, 5, 1, false), sets.loB, 1600); mk(blobGeo(0, 7, 1, true), sets.loC, 1600);
   {
-    const na = mk(blobGeo(2, 31, 6, false), sets.nrB, 0.72), nb = mk(blobGeo(2, 47, 4, true), sets.nrC, 0.78);
-    mk(cardGeo(190, 131, 6, 0.27), sets.nrB); mk(cardGeo(120, 147, 4, 0.24), sets.nrC);
-    if (na) WORLD.casters.push({ mesh: na, mat: dm }); if (nb) WORLD.casters.push({ mesh: nb, mat: dm });
+    const na = mk(blobGeo(2, 31, 6, false), sets.nrB, 100, 0.72), nb = mk(blobGeo(2, 47, 4, true), sets.nrC, 100, 0.78);
+    mk(cardGeo(190, 131, 6, 0.27), sets.nrB, 100); mk(cardGeo(120, 147, 4, 0.24), sets.nrC, 100);
+    for (const mesh of [...na, ...nb]) WORLD.casters.push({ mesh, mat: dm });
     WORLD.nearTrees = sets.nrB.length / 6 + sets.nrC.length / 6;
   }
-  if (a) WORLD.casters.push({ mesh: a, mat: dm }); if (b) WORLD.casters.push({ mesh: b, mat: dm });
+  for (const mesh of [...a, ...b]) WORLD.casters.push({ mesh, mat: dm });
   WORLD.treeTris = tris;
   return grp;
 }
@@ -1314,19 +1344,33 @@ function buildCars() {
     }
   }
   const N = cars.length; WORLD.cars = cars;
-  // Two-tier 3D vehicle silhouette (lower body + recessed upper cabin + wheels)
-  const body = new THREE.BoxGeometry(1.86, 0.72, 4.55); body.translate(0, 0.54, 0);
-  const cab = new THREE.BoxGeometry(1.65,0.76,3.1);
-  const shell=cab.attributes.position;
-  for (let i=0;i<shell.count;i++) {
-    if (shell.getY(i)<0) continue;
-    shell.setX(i,shell.getX(i)*0.83);
-    shell.setZ(i,shell.getZ(i)*0.62);
+  // Longitudinal sections taper the bumper, hood, belt line and roof in metres.
+  function shell(sections) {
+    const vertices = [], indices = [];
+    sections.forEach(([z, base, top, halfWidth], i) => {
+      const shoulder = Math.min(0.08, (top-base)/3);
+      const ring = [[-0.91,base],[-1,base+shoulder],[-1,top-shoulder],[-0.89,top],
+                    [0.89,top],[1,top-shoulder],[1,base+shoulder],[0.91,base]];
+      for (const [x,y] of ring) vertices.push(x*halfWidth,y,z);
+      if (!i) return;
+      for (let k=0; k<8; k++) {
+        const a=(i-1)*8+k, b=(i-1)*8+(k+1)%8;
+        indices.push(a,a+8,b, b,a+8,b+8);
+      }
+    });
+    const end=(sections.length-1)*8;
+    for (let i=1; i<7; i++) indices.push(0,i,i+1, end,end+i+1,end+i);
+    const geo = new THREE.BufferGeometry();
+    geo.setAttribute('position',new THREE.Float32BufferAttribute(vertices,3));
+    geo.setIndex(indices); geo.computeVertexNormals();
+    return geo;
   }
-  cab.computeVertexNormals();
-  cab.translate(0,1.21,-0.12);
+  const body=shell([[-2.27,.32,.68,.77],[-2.06,.23,.84,.88],[-1.45,.22,.95,.93],
+                    [.90,.22,.92,.93],[1.83,.24,.80,.89],[2.27,.32,.64,.76]]);
+  const cab=shell([[-1.66,.82,.88,.79],[-.88,.86,1.45,.72],[-.52,.86,1.51,.73],
+                   [.30,.86,1.50,.73],[.61,.86,1.43,.73],[1.22,.84,.92,.81]]);
   const axle=new THREE.CylinderGeometry(0.33,0.33,1.89,12);
-  axle.rotateZ(Math.PI/2);
+  axle.deleteAttribute('uv'); axle.rotateZ(Math.PI/2);
   const front=axle.clone(), rear=axle.clone();
   front.translate(0,0.33,1.40);
   rear.translate(0,0.33,-1.40);
@@ -1340,7 +1384,8 @@ function buildCars() {
         vec3 n=normalize(vN); vec3 V=normalize(uCamPos-vW);
         // Sloped windscreens remain readable from an overhead apartment view.
         float isCab=step(0.97,vP.y)*(1.0-step(0.96,n.y));
-        isCab*=smoothstep(0.04,0.09,abs(vP.z+0.12));
+        isCab*=smoothstep(0.035,0.075,abs(vP.z+0.12));
+        isCab*=1.-smoothstep(1.39,1.47,vP.y);
         vec3 alb=mix(vC, vec3(0.03,0.04,0.055), isCab);
         float wheel=step(0.932,abs(vP.x))*step(vP.y,0.67);
         float hub=1.0-smoothstep(0.15,0.18,length(vec2(abs(vP.z)-1.40,vP.y-0.33)));
@@ -1352,18 +1397,32 @@ function buildCars() {
         col+=sampleSky(vec3(R.x,max(R.y,0.02),R.z))*fr*mix(0.22, 0.85, isCab);
         float head=step(2.22,vP.z)*step(vP.y,0.82)*step(0.36,vP.y)*step(0.45,abs(vP.x));
         float tail=step(vP.z,-2.22)*step(vP.y,0.85)*step(0.42,vP.y)*step(0.42,abs(vP.x));
+        col=mix(col,lit(vec3(.62,.68,.72),n,sh,1.),head*0.8);
+        col=mix(col,lit(vec3(.28,.014,.008),n,sh,1.),tail*0.85);
         col+=uNight*(vec3(1.0,0.95,0.85)*head*${(LAMP * 36).toFixed(4)}+vec3(1.0,0.05,0.03)*tail*${(LAMP * 12).toFixed(4)});
         gl_FragColor=vec4(col,1.0);
       }`,
   });
   const m = new THREE.InstancedMesh(geo, mat, N); m.frustumCulled = false; m.instanceMatrix.setUsage(THREE.DynamicDrawUsage);
-  for (let i = 0; i < N; i++) m.setColorAt(i, pal[cars[i].col]);
+  m.setColorAt(0,pal[0]); m.instanceColor.setUsage(THREE.DynamicDrawUsage);
+  const contactGeo=new THREE.PlaneGeometry(2.70,5.22);
+  contactGeo.rotateX(-Math.PI/2); contactGeo.translate(0,0.036,0);
+  const contact=new THREE.InstancedMesh(contactGeo,new THREE.ShaderMaterial({
+    transparent:true,depthWrite:false,polygonOffset:true,polygonOffsetFactor:-2,polygonOffsetUnits:-2,
+    vertexShader:`varying vec2 vUv; void main(){vUv=uv; gl_Position=projectionMatrix*viewMatrix*instanceMatrix*vec4(position,1.);}`,
+    fragmentShader:`varying vec2 vUv; void main(){
+      vec2 d=abs(vUv*2.-1.); float dist=length(max(d-vec2(.43,.55),0.)/vec2(.55,.43));
+      gl_FragColor=vec4(0.,0.,0.,.40*(1.-smoothstep(.05,1.,dist)));}`
+  }),N);
+  contact.instanceMatrix=m.instanceMatrix; contact.frustumCulled=false;
   const pg = new THREE.BufferGeometry(); pg.setAttribute('position', new THREE.BufferAttribute(new Float32Array(N * 3), 3).setUsage(THREE.DynamicDrawUsage)); pg.setAttribute('aS', new THREE.BufferAttribute(new Float32Array(N * 2), 2).setUsage(THREE.DynamicDrawUsage));
   const pm = WORLD.lamps.material.clone(); pm.uniforms.uNight = U.uNight; pm.uniforms.uPx = WORLD.lamps.material.uniforms.uPx; pm.uniforms.uTime = U.uTime;
   pm.vertexShader = pm.vertexShader.replace('vec3 stCol=mix(vec3(1.0,0.62,0.26),vec3(0.96,0.94,0.88),step(0.55,aS.x));', 'vec3 stCol=mix(vec3(1.0,0.06,0.03)*0.45,vec3(1.0,0.96,0.88)*1.5,aS.x);').replace('220.0', '150.0');
   const pts = new THREE.Points(pg, pm); pts.frustumCulled = false;
   const M = new THREE.Matrix4(), q = new THREE.Quaternion(), up = new THREE.Vector3(0, 1, 0), pos = new THREE.Vector3(), one = new THREE.Vector3(1, 1, 1), cam = new THREE.Vector3();
   const slope=new THREE.Vector3(), right=new THREE.Vector3(), forward=new THREE.Vector3();
+  const trafficFrustum = new THREE.Frustum(), cameraClip = new THREE.Matrix4();
+  const vehicleBounds = new THREE.Sphere(new THREE.Vector3(), 7);
   WORLD.updateCars = (dt, camera, demand) => {
     junction.update(dt,S.doy,S.hour,S.playing,demand);
     for (const lane of junction.lanes) {
@@ -1376,22 +1435,28 @@ function buildCars() {
     }
     const elapsed=dt*(S.playing ? TRAFFIC_PLAYBACK_RATE : 1);
     const P = pg.attributes.position.array, A = pg.attributes.aS.array; camera.getWorldPosition(cam);
+    trafficFrustum.setFromProjectionMatrix(cameraClip.multiplyMatrices(camera.projectionMatrix,camera.matrixWorldInverse));
+    let visible = 0;
     for (let i = 0; i < N; i++) {
       const c=cars[i], p=c.p;
       if (!c.local) c.t=(c.t+c.v*(1-0.29*demand)*c.dir*elapsed+p.L)%p.L;
       const active=c.local ? c.active : c.rank<demand && !p.tunnel;
+      if (!active) continue;
       let k = c.k || 1; if (k >= p.pts.length) k = 1; while (k < p.pts.length - 1 && p.pts[k][2] < c.t) k++; while (k > 1 && p.pts[k - 1][2] > c.t) k--; c.k = k;
       const a = p.pts[k - 1], b = p.pts[k], f = (c.t - a[2]) / Math.max(b[2] - a[2], 0.01); const dx = b[0] - a[0], dz = b[1] - a[1], L = Math.hypot(dx, dz) || 1;
       const nx = -dz / L, nz = dx / L;
       let x=lerp(a[0],b[0],f)+nx*c.laneOff, z=lerp(a[1],b[1],f)+nz*c.laneOff;
       let hx=dx/L,hz=dz/L;
-      if (active && Math.abs(x)<200 && Math.abs(z)<220) {
+      if (Math.abs(x)<200 && Math.abs(z)<220) {
         const pose=frontageTrafficPose(x,z,hx,hz,c.laneOff,c.dir);
         if (pose) [x,z,hx,hz]=pose;
       }
-      const y = active && (c.local || !withinJunctionRoad(x,z)) ? (Math.hypot(x,z)<550 ? streetDeckY(x,z) : groundY(x,z)) : -500;
+      if (!c.local && withinJunctionRoad(x,z)) continue;
+      const y = Math.hypot(x,z)<550 ? streetDeckY(x,z) : groundY(x,z);
+      vehicleBounds.center.set(x,y+0.75,z);
+      if (!trafficFrustum.intersectsSphere(vehicleBounds)) continue;
       pos.set(x,y,z);
-      if (c.local && active) {
+      if (c.local) {
         slope.set(streetDeckY(x-1,z)-streetDeckY(x+1,z),2,streetDeckY(x,z-1)-streetDeckY(x,z+1)).normalize();
         forward.set(hx*c.dir,0,hz*c.dir);
         right.crossVectors(slope,forward).normalize();
@@ -1400,13 +1465,17 @@ function buildCars() {
       } else {
         q.setFromAxisAngle(up,Math.atan2(hx*c.dir,hz*c.dir));
       }
-      M.compose(pos,q,one); m.setMatrixAt(i,M);
-      P[i * 3] = x; P[i * 3 + 1] = y + 0.72; P[i * 3 + 2] = z;
-      A[i * 2] = ((cam.x - x) * dx + (cam.z - z) * dz) * c.dir > 0 ? 1 : 0;
+      M.compose(pos,q,one); m.setMatrixAt(visible,M); m.setColorAt(visible,pal[c.col]);
+      P[visible*3]=x; P[visible*3+1]=y+0.72; P[visible*3+2]=z;
+      A[visible*2]=((cam.x-x)*dx+(cam.z-z)*dz)*c.dir>0 ? 1 : 0;
+      visible++;
     }
-    m.instanceMatrix.needsUpdate = true; pg.attributes.position.needsUpdate = true; pg.attributes.aS.needsUpdate = true;
+    m.count=contact.count=visible;
+    pg.setDrawRange(0,visible);
+    m.instanceMatrix.needsUpdate=true; m.instanceColor.needsUpdate=true;
+    pg.attributes.position.needsUpdate=true; pg.attributes.aS.needsUpdate=true;
   };
-  const g = new THREE.Group(); g.add(m, pts); return g;
+  const g = new THREE.Group(); g.add(m, pts, contact); return g;
 }
 
 // ───── sun shadow map (expanded smooth coverage)
