@@ -25,6 +25,7 @@ body{background:var(--bg);color:var(--fg);font-family:var(--body);overflow:hidde
 #tip{position:absolute;left:0;top:0;z-index:5;pointer-events:none;padding:6px 10px;border-radius:9px;background:rgba(10,13,18,.82);border:1px solid var(--line);backdrop-filter:blur(8px);-webkit-backdrop-filter:blur(8px);font-size:13px;white-space:nowrap;box-shadow:0 4px 18px rgba(0,0,0,.35)}
 #tip b{font-weight:700} #tip span{margin-left:8px;color:var(--dim);font-size:12px;font-variant-numeric:tabular-nums}
 #stage.clean #top,#stage.clean #mapbox,#stage.clean #hud,#stage.clean #tip,#stage.clean #stick{display:none}
+#map.site-map{cursor:default}
 #toast{position:absolute;left:50%;bottom:calc(28px + env(safe-area-inset-bottom,0px));transform:translateX(-50%);z-index:6;pointer-events:none;padding:8px 14px;border-radius:999px;background:rgba(10,13,18,.8);border:1px solid var(--line);font-size:13px;white-space:nowrap}
 #stick{position:absolute;left:max(18px,env(safe-area-inset-left,0px));bottom:calc(64px + env(safe-area-inset-bottom,0px));width:96px;height:96px;border-radius:50%;background:rgba(14,17,22,.38);border:1px solid var(--line);touch-action:none;display:none;z-index:4}
 #stick i{position:absolute;left:50%;top:50%;width:44px;height:44px;margin:-22px 0 0 -22px;border-radius:50%;background:rgba(255,255,255,.55)}
@@ -69,7 +70,7 @@ input[type=range]::-moz-range-thumb{width:18px;height:18px;border-radius:50%;bac
   <a id="imageryCredit" href="https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer" target="_blank" rel="noopener">영상 © Esri, Vantor, Earthstar Geographics, GIS User Community</a>
   <div id="tip" hidden><b></b><span></span></div>
   <div id="top">
-    <button id="title" class="btn" type="button" aria-expanded="false"><b id="roomLab">거실</b><span id="clock"></span></button>
+    <button id="title" class="btn" type="button" aria-expanded="false"><b id="roomLab">단지 전경</b><span id="clock"></span></button>
     <div id="facts" hidden>
       <h1>광교 자연앤 센트레빌 1703동 1702호</h1>
       <p>84B · 17층 · 남동향 · 2029년 10월 입주 예정</p>
@@ -84,7 +85,7 @@ input[type=range]::-moz-range-thumb{width:18px;height:18px;border-radius:50%;bac
       </dl>
     </div>
   </div>
-  <div id="mapbox"><canvas id="map" aria-label="평면도. 눌러서 이동"></canvas><a id="mapcredit" href="https://www.openstreetmap.org/copyright" target="_blank" rel="noopener" hidden>© OpenStreetMap</a></div>
+  <div id="mapbox"><canvas id="map" class="site-map" aria-label="북쪽 기준 단지와 주변 도로 배치도"></canvas><a id="mapcredit" href="https://www.openstreetmap.org/copyright" target="_blank" rel="noopener" hidden>© OpenStreetMap</a></div>
   <div id="hud" class="min">
     <div class="panel">
       <div class="row"><label for="doy">날짜</label><input id="doy" type="range" min="0" max="364" step="1"><output id="dateLab" for="doy"></output></div>
@@ -95,7 +96,7 @@ input[type=range]::-moz-range-thumb{width:18px;height:18px;border-radius:50%;bac
         <div class="grp"><span>조명</span><div class="chips" id="lights"></div></div>
       </div>
     </div>
-    <div id="roomsbar"><button class="btn" id="hide" type="button" aria-pressed="false">시간·날씨</button><button class="btn" id="drone" type="button" aria-pressed="false">단지 전경</button><button class="btn" id="street" type="button">교차로</button><button class="btn" id="orbit" type="button" aria-pressed="false" hidden>자동 회전</button><button class="btn" id="clean" type="button">가리기</button><button class="btn" id="fs" type="button" aria-pressed="false">전체화면</button><button class="btn" id="bgm" type="button" aria-pressed="false">음악</button><a class="btn" id="bgmsrc" href="https://youtu.be/z13_ZlsAlYQ" target="_blank" rel="noopener" style="text-decoration:none">원곡 열기</a></div>
+    <div id="roomsbar"><button class="btn" id="hide" type="button" aria-pressed="false">시간·날씨</button><button class="btn" id="overview" type="button" aria-pressed="true">단지 전경</button><button class="btn" id="living" type="button" aria-pressed="false">집 안으로</button><button class="btn" id="street" type="button">교차로</button><button class="btn" id="orbit" type="button" aria-pressed="false" hidden>자동 회전</button><button class="btn" id="clean" type="button">가리기</button><button class="btn" id="fs" type="button" aria-pressed="false">전체화면</button><button class="btn" id="bgm" type="button" aria-pressed="false">음악</button><a class="btn" id="bgmsrc" href="https://youtu.be/z13_ZlsAlYQ" target="_blank" rel="noopener" style="text-decoration:none">원곡 열기</a></div>
   </div>
   <div id="stick" aria-hidden="true"><i></i></div>
   <div id="toast" hidden></div>
@@ -194,7 +195,7 @@ const S = {
   doy: 311, hour: 15.5,                 // day of year (0-based, non-leap), local hour (KST)
   weather: 'clear',                     // clear | few | cloudy | rain | snow | dust
   lights: 'auto',                       // auto | on | off
-  room: 'living',
+  room: 'overview',
   playing: false,
 };
 const YEAR = 2029;                      // 입주 예정 연도 기준
@@ -637,7 +638,7 @@ function roadDirection(pts, fallback) {
   return fallback ? 1 : 0;
 }
 
-// A fixed north-up plan keeps the camera bearing readable as the drone turns.
+// A fixed north-up plan keeps the camera bearing readable as the camera turns.
 function drawSiteMap(g,w,h,heading) {
   const f=W.frame, scale=Math.min(w/445,h/390);
   const screen=(x,z) => [w/2+(x*f.rE-z*f.nE-12)*scale,h/2-(x*f.rN-z*f.nN+24)*scale];
@@ -676,10 +677,6 @@ function drawSiteMap(g,w,h,heading) {
   g.fillStyle='#ffa34e'; g.fill(); g.strokeStyle='#192221'; g.lineWidth=1; g.stroke(); g.restore();
   g.fillStyle='#f0f3ee'; g.fillText('↑ N',w-16,10);
   g.fillRect(9,h-8,50*scale,1.5); g.fillText('50 m',9+25*scale,h-15);
-  drawMap.inv=(px,py) => {
-    const east=(px-w/2)/scale+12, north=(h/2-py)/scale-24;
-    return [east*f.rE+north*f.rN,-east*f.nE-north*f.nN];
-  };
 }
 
 // Equal-distance samples pair the opposing ramp axes even when OSM node counts differ.
@@ -4789,7 +4786,8 @@ const WEATHER = {
 const WX = { ...WEATHER.clear };            // smoothed current weather
 const ENV = { exp: 1, expTarget: 1, lampOn: false, sunAlt: 0, sunAz: 0, dirty: true };
 let renderer, cam, extScene, homeScene, precip, marker;
-const view = { yaw: 0, pitch: -0.04, fov: 62, pos: new THREE.Vector3(0.5, FY + EYE, 3.4), tyaw: 0, tpitch: -0.04, tpos: new THREE.Vector3(0.5, FY + EYE, 3.4), tfov: 62, drone: false, dAz: 1.65, dEl: 0.68, dDist: 405 };
+const view = { yaw: 0, pitch: -0.04, fov: 62, pos: new THREE.Vector3(0.5, FY + EYE, 3.4), tyaw: 0, tpitch: -0.04, tpos: new THREE.Vector3(0.5, FY + EYE, 3.4), tfov: 62, outdoors: true };
+const orbit = { azimuth: 1.65, elevation: 0.68, distance: 405, playing: true };
 const VIEWS = {
   living: { p: [0.75, 3.75], yaw: -0.10, pitch: -0.05, label: '거실' },
   window: { p: [0.0, 0.95], yaw: 0.0, pitch: -0.10, label: '창가' },
@@ -4801,7 +4799,6 @@ const VIEWS = {
   ent: { p: [6.2, 5.9], yaw: 3.1416, pitch: -0.03, label: '현관' },
   bath: { p: [4.9, 5.75], yaw: -2.5, pitch: -0.12, label: '욕실' },
   util: { p: [5.0, 8.1], yaw: -1.75, pitch: -0.05, label: '다용도실' },
-  drone: { label: '단지 전경' },
 };
 
 const _v = new THREE.Vector3(), _c = [0, 0, 0];
@@ -4873,7 +4870,7 @@ function updateEnv() {
   lutSample(_v.set(0, 0.08, -1).normalize(), _c); const skyH = lum(_c);
   const key = 0.48 * skyH + 0.24 * lum([L.r, L.g, L.b]) * Math.max(U.uLDir.value.y, 0.05) * WX.shade + 0.24 * lum(up) / PI;
   let e = 0.66 / Math.max(key, 1e-6);
-  const cap = ENV.lampOn ? 0.55 / 0.012 : 170; e = clamp(e, 0.14, view.drone ? 150 : cap);
+  const cap = ENV.lampOn ? 0.55 / 0.012 : 170; e = clamp(e, 0.14, view.outdoors ? 150 : cap);
   ENV.expTarget = e;
   if (HOME.uni) {
     const HU = HOME.uni, facing = skyIrradiance(0, 0, -1);
@@ -4954,21 +4951,21 @@ const roomAt = (x, z) => { for (const r of RLIST) if (x >= r[1] && x <= r[2] && 
 function walkable(x, z, R = 0.2) { if (x < -2.05 || x > 11.93 || z < 0.6 || z > 9.25) return false; for (const b of HOME.solid) if (x > b[0] - R && x < b[1] + R && z > b[2] - R && z < b[3] + R) return false; return true; }
 function drawMap() {
   const c = $('map'); if (!c) return; const w = c.clientWidth, h = c.clientHeight; if (!w || !h) return;
-  const heading = view.drone ? cam.getWorldDirection(_v) : null;
-  const key = w + (view.drone ? 'd'+Math.round(cam.position.x)+','+Math.round(cam.position.z)+','+Math.atan2(heading.x,-heading.z).toFixed(2) : view.pos.x.toFixed(2) + ',' + view.pos.z.toFixed(2) + ',' + view.yaw.toFixed(2) + ',' + view.fov.toFixed(0)); if (key === drawMap.k) return; drawMap.k = key;
+  const heading = view.outdoors ? cam.getWorldDirection(_v) : null;
+  const key = w + (view.outdoors ? 'd'+Math.round(cam.position.x)+','+Math.round(cam.position.z)+','+Math.atan2(heading.x,-heading.z).toFixed(2) : view.pos.x.toFixed(2) + ',' + view.pos.z.toFixed(2) + ',' + view.yaw.toFixed(2) + ',' + view.fov.toFixed(0)); if (key === drawMap.k) return; drawMap.k = key;
   const d = Math.min(devicePixelRatio || 1, 3); if (c.width !== Math.round(w * d)) { c.width = Math.round(w * d); c.height = Math.round(h * d); }
   const g = c.getContext('2d'); g.setTransform(d, 0, 0, d, 0, 0); g.clearRect(0, 0, w, h);
-  if (view.drone) { drawSiteMap(g,w,h,heading); return; }
+  if (view.outdoors) { drawSiteMap(g,w,h,heading); return; }
   const pad = 6, s = Math.min((w - 2 * pad) / (PLAN.x1 - PLAN.x0), (h - 2 * pad) / (PLAN.z1 - PLAN.z0)), ox = (w - s * (PLAN.x1 - PLAN.x0)) / 2, oz = (h - s * (PLAN.z1 - PLAN.z0)) / 2;
   const X = (x) => ox + (PLAN.x1 - x) * s, Z = (z) => oz + (PLAN.z1 - z) * s, R = (x0, x1, z0, z1) => g.fillRect(X(x1), Z(z1), (x1 - x0) * s, (z1 - z0) * s);
   drawMap.inv = (px, py) => [PLAN.x1 - (px - ox) / s, PLAN.z1 - (py - oz) / s];
-  const cur = view.drone ? '' : roomAt(view.pos.x, view.pos.z);
+  const cur = view.outdoors ? '' : roomAt(view.pos.x, view.pos.z);
   for (const r of RLIST) { g.fillStyle = r[0] === cur ? 'rgba(243,183,101,.36)' : 'rgba(255,255,255,.12)'; R(r[1], r[2], r[3], r[4]); }
   g.fillStyle = 'rgba(255,255,255,.2)'; for (const b of HOME.solid) if ((b[1] - b[0]) > 0.25 && (b[3] - b[2]) > 0.25) R(b[0], b[1], b[2], b[3]);     // cabinets and fixtures
   for (const b of HOME.walls) { g.fillStyle = b[4] > 2 ? 'rgba(255,255,255,.9)' : 'rgba(130,200,255,.9)'; R(b[0], b[1], b[2], b[3]); }
   g.font = '500 9px ' + getComputedStyle(document.body).fontFamily; g.textAlign = 'center'; g.textBaseline = 'middle'; g.fillStyle = 'rgba(255,255,255,.82)';
   for (const r of RLIST) if ((r[2] - r[1]) * s > 30 && (r[4] - r[3]) * s > 18) g.fillText(r[0], X((r[1] + r[2]) / 2), Z((r[3] + r[4]) / 2));
-  if (!view.drone) { const px = X(view.pos.x), py = Z(view.pos.z), a = Math.atan2(Math.cos(view.yaw), -Math.sin(view.yaw)), hf = view.fov * RAD * 0.62;
+  if (!view.outdoors) { const px = X(view.pos.x), py = Z(view.pos.z), a = Math.atan2(Math.cos(view.yaw), -Math.sin(view.yaw)), hf = view.fov * RAD * 0.62;
     const gr = g.createRadialGradient(px, py, 0, px, py, 22); gr.addColorStop(0, 'rgba(243,183,101,.75)'); gr.addColorStop(1, 'rgba(243,183,101,0)');
     g.fillStyle = gr; g.beginPath(); g.moveTo(px, py); g.arc(px, py, 22, a - hf, a + hf); g.closePath(); g.fill();
     g.fillStyle = '#f3b765'; g.strokeStyle = '#1d1406'; g.lineWidth = 1; g.beginPath(); g.arc(px, py, 3.6, 0, 6.2832); g.fill(); g.stroke(); }
@@ -4976,25 +4973,20 @@ function drawMap() {
 function goView(name, instant) {
   const street=name==='street';
   const gate=name==='main-gate' ? WORLD.gates.main : name==='west-gate' ? WORLD.gates.west : null;
-  view.drone=!!gate || street || name==='drone';
-  if (view.drone && HOME.group) releaseHome();
-  if (!view.drone && !HOME.group) homeScene.add(buildHome(HOME.floorLight));
-  if (!view.drone && !VIEWS[name]) name='living';
+  if (!street && !gate && !Object.hasOwn(VIEWS,name)) name='overview';
+  view.outdoors=!!gate || street || name==='overview';
+  if (view.outdoors && HOME.group) releaseHome();
+  if (!view.outdoors && !HOME.group) homeScene.add(buildHome(HOME.floorLight));
   S.room=name; const v=VIEWS[name];
-  if (!view.drone) { view.tpos.set(v.p[0], FY + EYE, v.p[1]); view.tyaw = v.yaw; view.tpitch = v.pitch; view.tfov = 62; if (instant) { view.pos.copy(view.tpos); view.yaw = view.tyaw; view.pitch = view.tpitch; } }
-  else { // free-flying drone: start on the old orbit, looking at the complex (owner 2026-11-17: fly it yourself, no auto-rotation)
-    const c = [0, FY * 0.7, -25]; view.tpos.set(c[0] + Math.sin(view.dAz) * Math.cos(view.dEl) * view.dDist, c[1] + Math.sin(view.dEl) * view.dDist, c[2] - Math.cos(view.dAz) * Math.cos(view.dEl) * view.dDist);
-    const dx = c[0] - view.tpos.x, dy = c[1] - view.tpos.y, dz = c[2] - view.tpos.z; view.tyaw = Math.atan2(dx, -dz); view.tpitch = Math.atan2(dy, Math.hypot(dx, dz)); view.tfov = 55;
-    view.pos.copy(view.tpos); view.yaw = view.tyaw; view.pitch = view.tpitch; view.fov = 55; if (!SHOT && !view.flown) { view.flown = 1; const el = $('toast'); if (el) { el.textContent = matchMedia('(pointer:coarse)').matches ? '끌어서 둘러보고, 왼쪽 패드로 보는 방향으로 날아갑니다' : '끌어서 둘러보기 · WASD 비행 · Q/E 내려가기/올라가기 · Shift 빠르게'; el.hidden = false; setTimeout(() => { el.hidden = true; }, 5000); } } }
+  if (!view.outdoors) { view.tpos.set(v.p[0], FY + EYE, v.p[1]); view.tyaw = v.yaw; view.tpitch = v.pitch; view.tfov = 62; if (instant) { view.pos.copy(view.tpos); view.yaw = view.tyaw; view.pitch = view.tpitch; } }
+  if (name === 'overview') orbit.playing = true;
   if (street) {
-    view.orbit=false;
     // Look west from the sidewalk along the arm with the two crossings.
     view.tpos.set(176,streetDeckY(176,-30.7)+2.15,-30.7);
     view.tyaw=-2.11; view.tpitch=-0.055; view.tfov=65;
     view.pos.copy(view.tpos); view.yaw=view.tyaw; view.pitch=view.tpitch; view.fov=view.tfov;
   }
   if (gate) {
-    view.orbit=false;
     const [x,z]=gate.mouth, dx=Math.sin(gate.heading), dz=-Math.cos(gate.heading);
     const lateral=name==='west-gate'?4:7;
     const px=x-13*dx+lateral*dz, pz=z-13*dz-lateral*dx;
@@ -5003,10 +4995,18 @@ function goView(name, instant) {
     view.tyaw=Math.atan2(vx,-vz); view.tpitch=-0.20; view.tfov=63;
     view.pos.copy(view.tpos); view.yaw=view.tyaw; view.pitch=view.tpitch; view.fov=view.tfov;
   }
-  { const db = $('drone'); if (db) { db.setAttribute('aria-pressed', view.drone); db.textContent = view.drone ? '집 안으로' : '단지 전경'; } const ob = $('orbit'); if (ob) { ob.hidden = !view.drone; ob.setAttribute('aria-pressed', !!view.orbit); } $('stick').classList.toggle('off', !!(view.drone && view.orbit)); }
-  $('mapcredit').hidden = !view.drone;
-  $('map').setAttribute('aria-label',view.drone ? '북쪽 기준 단지와 주변 도로 배치도. 눌러서 상공으로 이동' : '평면도. 눌러서 이동');
-  if (marker) marker.visible = view.drone; ENV.dirty = true;
+  $('overview').setAttribute('aria-pressed',name==='overview');
+  $('living').setAttribute('aria-pressed',!view.outdoors);
+  $('street').setAttribute('aria-pressed',street);
+  $('orbit').hidden = name !== 'overview';
+  $('orbit').setAttribute('aria-pressed',orbit.playing);
+  $('stick').classList.toggle('off',view.outdoors);
+  $('map').classList.toggle('site-map',view.outdoors);
+  drawMap.inv = null;
+  drawMap.k = null;
+  $('mapcredit').hidden = !view.outdoors;
+  $('map').setAttribute('aria-label',view.outdoors ? '북쪽 기준 단지와 주변 도로 배치도' : '평면도. 눌러서 이동');
+  if (marker) marker.visible = view.outdoors; ENV.dirty = true;
 }
 
 function setupUI() {
@@ -5021,18 +5021,16 @@ function setupUI() {
   $('play').onclick = () => { S.playing = !S.playing; $('play').setAttribute('aria-pressed', S.playing); $('play').textContent = S.playing ? '멈춤' : '하루 재생'; };
   $('hide').onclick = () => { const h = $('hud').classList.toggle('min'); $('hide').setAttribute('aria-pressed', !h); };
   $('title').onclick = () => { const f = $('facts'); f.hidden = !f.hidden; $('title').setAttribute('aria-expanded', !f.hidden); };
-  $('orbit').onclick = () => { if (!view.orbit) { const c = [0, FY * 0.7, -25], dx = view.pos.x - c[0], dy = view.pos.y - c[1], dz = view.pos.z - c[2]; view.dDist = clamp(Math.hypot(dx, dy, dz), 60, 600); view.dAz = Math.atan2(dx, -dz); view.dEl = clamp(Math.asin(clamp(dy / Math.hypot(dx, dy, dz), -1, 1)), 0.03, 1.4); view.orbit = true; view.flown = 1; goView('drone', true); } else { view.orbit = false; goView('drone', true); } };
+  $('orbit').onclick = () => {
+    orbit.playing = !orbit.playing;
+    $('orbit').setAttribute('aria-pressed',orbit.playing);
+  };
   for (const button of document.querySelectorAll('[data-gate-view]'))
     button.onclick=()=>{goView(button.dataset.gateView,true); $('facts').hidden=true; $('title').setAttribute('aria-expanded',false);};
   $('street').onclick = () => goView('street',true);
-  $('drone').onclick = () => goView(view.drone ? 'living' : 'drone', true);
-  { const mp = $('map'); const go = (e) => { if (!drawMap.inv) return; const r = mp.getBoundingClientRect(), [x, z] = drawMap.inv(e.clientX - r.left, e.clientY - r.top); let best = null;
-      if (view.drone) {
-        if (view.orbit) { view.orbit=false; $('orbit').setAttribute('aria-pressed','false'); $('stick').classList.remove('off'); }
-        view.pos.set(x,Math.max(view.pos.y,groundY(x,z)+85),z); view.tpos.copy(view.pos);
-        view.pitch=view.tpitch=-0.9;
-        return;
-      }
+  $('overview').onclick = () => goView('overview',true);
+  $('living').onclick = () => goView('living',true);
+  { const mp = $('map'); const go = (e) => { if (view.outdoors || !drawMap.inv) return; const r = mp.getBoundingClientRect(), [x, z] = drawMap.inv(e.clientX - r.left, e.clientY - r.top); let best = null;
       for (let rad = 0; rad <= 1.2 && !best; rad += 0.15) for (let a = 0; a < 12; a++) { const px = x + Math.cos(a * 0.5236) * rad, pz = z + Math.sin(a * 0.5236) * rad; if (walkable(px, pz) && roomAt(px, pz)) { best = [px, pz]; break; } }
       if (!best) return;
       const far = Math.hypot(best[0] - view.pos.x, best[1] - view.pos.z) > 1.2; view.tpos.x = best[0]; view.tpos.z = best[1]; if (far) { view.pos.x = best[0]; view.pos.z = best[1]; } };
@@ -5042,7 +5040,7 @@ function setupUI() {
   // name of the building under the cursor (hover) or finger (tap)
   const tip = $('tip'); let tipT = 0, down = null, lastPick = 0;
   const showTip = (cx, cy, hold) => {
-    const r = cv.getBoundingClientRect(), hit = pickAt(cam, (cx - r.left) / r.width * 2 - 1, -((cy - r.top) / r.height * 2 - 1), !view.drone);
+    const r = cv.getBoundingClientRect(), hit = pickAt(cam, (cx - r.left) / r.width * 2 - 1, -((cy - r.top) / r.height * 2 - 1), !view.outdoors);
     clearTimeout(tipT); if (!hit) { tip.hidden = true; return; }
     const dm = hit.dist < 950 ? Math.round(hit.dist / 10) * 10 + 'm' : (hit.dist / 1000).toFixed(1) + 'km';
     tip.firstChild.textContent = hit.name; tip.lastChild.textContent = (hit.sub ? hit.sub + ' · ' : '') + dm; tip.hidden = false;
@@ -5053,18 +5051,18 @@ function setupUI() {
   cv.addEventListener('pointerleave', () => { tip.hidden = true; });
   cv.addEventListener('pointerdown', (e) => { down = [e.clientX, e.clientY, performance.now()]; tip.hidden = true; });
   cv.addEventListener('pointerup', (e) => { if (down && Math.hypot(e.clientX - down[0], e.clientY - down[1]) < 8 && performance.now() - down[2] < 500) showTip(e.clientX, e.clientY, e.pointerType !== 'mouse'); down = null; });
-  window.__pick = (x, y) => pickAt(cam, x, y, !view.drone);
+  window.__pick = (x, y) => pickAt(cam, x, y, !view.outdoors);
   cv.addEventListener('pointerdown', (e) => { cv.setPointerCapture(e.pointerId); pts.set(e.pointerId, [e.clientX, e.clientY]); drag = [e.clientX, e.clientY]; if (pts.size === 2) { const p = [...pts.values()]; pinch = Math.hypot(p[0][0] - p[1][0], p[0][1] - p[1][1]); } });
   cv.addEventListener('pointermove', (e) => {
     if (!pts.has(e.pointerId)) return; pts.set(e.pointerId, [e.clientX, e.clientY]);
-    if (pts.size === 2) { const p = [...pts.values()], d = Math.hypot(p[0][0] - p[1][0], p[0][1] - p[1][1]); if (pinch) { if (view.drone && view.orbit) view.dDist = clamp(view.dDist * pinch / d, 60, 600); else view.tfov = clamp(view.tfov * pinch / d, 18, 85); } pinch = d; return; }
+    if (pts.size === 2) { const p = [...pts.values()], d = Math.hypot(p[0][0] - p[1][0], p[0][1] - p[1][1]); if (pinch) { if (S.room === 'overview') orbit.distance = clamp(orbit.distance * pinch / d, 60, 600); else view.tfov = clamp(view.tfov * pinch / d, 18, 85); } pinch = d; return; }
     const dx = e.clientX - drag[0], dy = e.clientY - drag[1]; drag = [e.clientX, e.clientY]; const k = 0.0032 * view.fov / 62;
-    if (view.drone && view.orbit) { view.dAz -= dx * 0.005; view.dEl = clamp(view.dEl + dy * 0.004, 0.03, 1.4); }
+    if (S.room === 'overview') { orbit.azimuth -= dx * 0.005; orbit.elevation = clamp(orbit.elevation + dy * 0.004, 0.03, 1.4); }
     else { const sg = e.pointerType === 'mouse' ? -1 : 1; view.tyaw += dx * k * sg; view.tpitch = clamp(view.tpitch - dy * k * sg, -1.2, 1.2); }   // touch: look toward the drag; mouse: grab the scene (owner 2026-11-17)
   });
   const up = (e) => { pts.delete(e.pointerId); pinch = 0; }; cv.addEventListener('pointerup', up); cv.addEventListener('pointercancel', up);
-  cv.addEventListener('wheel', (e) => { e.preventDefault(); if (view.drone && view.orbit) view.dDist = clamp(view.dDist * (1 + e.deltaY * 0.001), 60, 600); else view.tfov = clamp(view.tfov * (1 + e.deltaY * 0.0012), 18, 85); }, { passive: false });
-  const keys = {}; const MOVE = /^(Arrow(Up|Down|Left|Right)|Key[WASDQE])$/;
+  cv.addEventListener('wheel', (e) => { e.preventDefault(); if (S.room === 'overview') orbit.distance = clamp(orbit.distance * (1 + e.deltaY * 0.001), 60, 600); else view.tfov = clamp(view.tfov * (1 + e.deltaY * 0.0012), 18, 85); }, { passive: false });
+  const keys = {}; const MOVE = /^(Arrow(Up|Down|Left|Right)|Key[WASD])$/;
   // hide every control: button or H; H, Esc or a double tap brings them back
   const toast = (t) => { const el = $('toast'); el.textContent = t; el.hidden = false; clearTimeout(toast.t); toast.t = setTimeout(() => { el.hidden = true; }, 2600); };
   const setClean = (on) => { $('stage').classList.toggle('clean', on); if (on) toast(matchMedia('(pointer:coarse)').matches ? '화면을 두 번 탭하면 돌아옵니다' : 'H 키나 더블클릭으로 돌아옵니다'); else $('toast').hidden = true; };
@@ -5129,50 +5127,47 @@ function tick(dt) {
   precip.material.uniforms.uAmt.value = WX.precip; precip.material.uniforms.uSnowy.value = WX.snow; precip.visible = WX.precip > 0.01;
   const pc = precip.material.uniforms.uCol.value, sk = U.uSkyHor.value; pc.setRGB(sk.r * 2.2 + 2e-4, sk.g * 2.2 + 2e-4, sk.b * 2.3 + 2e-4);
   // camera
-  const k = view.keys || {}, sp = 2.2 * dt;
-  if (view.drone && (!SHOT || S.room==='street' || S.room.endsWith('-gate')) && !view.orbit) {
-    const J = view.joy || [0, 0], run = k.ShiftLeft || k.ShiftRight ? 3.5 : 1;
-    const f = (k.KeyW ? 1 : 0) - (k.KeyS ? 1 : 0) - J[1], r = (k.KeyD ? 1 : 0) - (k.KeyA ? 1 : 0) + J[0], up = (k.KeyE ? 1 : 0) - (k.KeyQ ? 1 : 0), turn = (k.ArrowRight ? 1 : 0) - (k.ArrowLeft ? 1 : 0), tilt = (k.ArrowUp ? 1 : 0) - (k.ArrowDown ? 1 : 0);
-    if (turn) view.tyaw += turn * 1.4 * dt; if (tilt) view.tpitch = clamp(view.tpitch + tilt * 1.0 * dt, -1.5, 1.5);
-    if (f || r || up) { const cp = Math.cos(view.pitch), fx = Math.sin(view.yaw) * cp, fy = Math.sin(view.pitch), fz = -Math.cos(view.yaw) * cp, rx = Math.cos(view.yaw), rz = Math.sin(view.yaw), st = 26 * run * dt;
-      view.tpos.x = clamp(view.tpos.x + (fx * f + rx * r) * st, -2500, 2500); view.tpos.z = clamp(view.tpos.z + (fz * f + rz * r) * st, -2500, 2500); view.tpos.y += (fy * f + up) * st; }
-    let gy = 0; for (const h of WORLD.hFns || []) if (Math.abs(view.tpos.x) < h.H && Math.abs(view.tpos.z) < h.H) { gy = h.hAt(view.tpos.x, view.tpos.z); break; }
-    if (onEntranceDrive(view.tpos.x,view.tpos.z)) gy=entranceFloor(view.tpos.x,view.tpos.z);
-    view.tpos.y = clamp(view.tpos.y, gy + 2, 900);
-    const e = 1 - Math.exp(-dt * 6);
-    view.pos.lerp(view.tpos, e); view.yaw += (view.tyaw - view.yaw) * e; view.pitch += (view.tpitch - view.pitch) * e; view.fov += (view.tfov - view.fov) * e;
-    cam.position.copy(view.pos); cam.rotation.set(view.pitch, -view.yaw, 0, 'YXZ');
-  } else if (!view.drone) {
-    // arrows look (←→ turn, ↑↓ tilt), WASD walk and side-step, Shift faster; the touch pad does the same as WASD
-    const J = view.joy || [0, 0], run = k.ShiftLeft || k.ShiftRight ? 1.9 : 1;
-    const f = (k.KeyW ? 1 : 0) - (k.KeyS ? 1 : 0) - J[1], r = (k.KeyD ? 1 : 0) - (k.KeyA ? 1 : 0) + J[0], turn = (k.ArrowRight ? 1 : 0) - (k.ArrowLeft ? 1 : 0), tilt = (k.ArrowUp ? 1 : 0) - (k.ArrowDown ? 1 : 0);
-    if (turn) view.tyaw += turn * 1.7 * dt;
-    if (tilt) view.tpitch = clamp(view.tpitch + tilt * 1.1 * dt, -1.2, 1.2);   // arrows only look (owner 2026-11-17); walking is WASD
-    if (f || r) { const fx = Math.sin(view.yaw), fz = -Math.cos(view.yaw), st = 1.7 * run * dt; const R = 0.2;
-      const free = (x, z) => walkable(x, z, R);
-      const nx = view.tpos.x + (fx * f - fz * r) * st, nz = view.tpos.z + (fz * f + fx * r) * st;
-      if (free(nx, view.tpos.z)) view.tpos.x = nx; if (free(view.tpos.x, nz)) view.tpos.z = nz; }
+  const k = view.keys || {};
+  if (S.room === 'overview') {
+    if (orbit.playing) orbit.azimuth += dt * 0.02;
+    const radius = orbit.distance * Math.cos(orbit.elevation);
+    const cy = FY * 0.7, cz = -25;
+    cam.position.set(Math.sin(orbit.azimuth)*radius, cy+Math.sin(orbit.elevation)*orbit.distance, cz-Math.cos(orbit.azimuth)*radius);
+    cam.lookAt(0,cy,cz);
+    view.pos.copy(cam.position);
+    view.fov = 50;
+  } else {
+    if (!view.outdoors) {
+      // arrows look (←→ turn, ↑↓ tilt), WASD walk and side-step, Shift faster; the touch pad does the same as WASD
+      const J = view.joy || [0, 0], run = k.ShiftLeft || k.ShiftRight ? 1.9 : 1;
+      const f = (k.KeyW ? 1 : 0) - (k.KeyS ? 1 : 0) - J[1], r = (k.KeyD ? 1 : 0) - (k.KeyA ? 1 : 0) + J[0];
+      if (f || r) { const fx = Math.sin(view.yaw), fz = -Math.cos(view.yaw), st = 1.7 * run * dt; const R = 0.2;
+        const free = (x, z) => walkable(x, z, R);
+        const nx = view.tpos.x + (fx * f - fz * r) * st, nz = view.tpos.z + (fz * f + fx * r) * st;
+        if (free(nx, view.tpos.z)) view.tpos.x = nx; if (free(view.tpos.x, nz)) view.tpos.z = nz; }
+    }
+    const turn = Number(!!k.ArrowRight) - Number(!!k.ArrowLeft);
+    const tilt = Number(!!k.ArrowUp) - Number(!!k.ArrowDown);
+    view.tyaw += turn * 1.7 * dt;
+    view.tpitch = clamp(view.tpitch + tilt * 1.1 * dt, -1.2, 1.2);
     const e = SHOT ? 1 : 1 - Math.exp(-dt * 7);
     view.pos.lerp(view.tpos, e); view.yaw += (view.tyaw - view.yaw) * e; view.pitch += (view.tpitch - view.pitch) * e; view.fov += (view.tfov - view.fov) * e;
     cam.position.copy(view.pos); cam.rotation.set(view.pitch, -view.yaw, 0, 'YXZ');
-  } else {
-    const t = WORLD.towerInfo['1703'], [cx, cy, cz] = view.dC || [0, FY * 0.7, -25]; if (!SHOT) view.dAz += dt * 0.02;
-    cam.position.set(cx + Math.sin(view.dAz) * Math.cos(view.dEl) * view.dDist, cy + Math.sin(view.dEl) * view.dDist, cz - Math.cos(view.dAz) * Math.cos(view.dEl) * view.dDist); cam.lookAt(cx, cy, cz); view.fov = view.dFov || 50;
   }
   // view.fov is the vertical angle on a wide screen; on a tall (phone) screen widen it so the sideways view is not a narrow slot
-  cam.fov = view.drone || cam.aspect >= 1.2 ? view.fov : Math.min(110, 2 * Math.atan(Math.tan(view.fov * RAD / 2) * Math.pow(1.2 / cam.aspect, 0.6)) / RAD); cam.updateProjectionMatrix(); cam.updateMatrixWorld();
+  cam.fov = view.outdoors || cam.aspect >= 1.2 ? view.fov : Math.min(110, 2 * Math.atan(Math.tan(view.fov * RAD / 2) * Math.pow(1.2 / cam.aspect, 0.6)) / RAD); cam.updateProjectionMatrix(); cam.updateMatrixWorld();
   for (const d of HOME.doors) {   // doors rest shut and open as you come near
-    const near = !view.drone && Math.hypot(view.pos.x - d.cx, view.pos.z - d.cz) < (d.t > 0.01 ? 1.9 : 1.45), want = near ? 1 : 0;
+    const near = !view.outdoors && Math.hypot(view.pos.x - d.cx, view.pos.z - d.cz) < (d.t > 0.01 ? 1.9 : 1.45), want = near ? 1 : 0;
     const ds = Math.max(dt, 0) * 1.5; d.t = SHOT ? want : clamp(d.t + clamp(want - d.t, -ds, ds), 0, 1); const e = d.t * d.t * (3 - 2 * d.t);
     if (d.rot !== undefined) d.mesh.rotation.y = d.rot * e; else d.mesh.position.set(d.px + d.sx * e, 0, d.pz + d.sz * e); }
-  { const rl = view.drone ? (S.room==='street' ? '교차로' : S.room==='main-gate' ? '주출입구' : S.room==='west-gate' ? '부출입구' : '단지 전경') : (roomAt(view.pos.x, view.pos.z) || '집'); if (rl !== view.rl) { view.rl = rl; $('roomLab').textContent = rl; } drawMap(); }
+  { const rl = view.outdoors ? (S.room==='street' ? '교차로' : S.room==='main-gate' ? '주출입구' : S.room==='west-gate' ? '부출입구' : '단지 전경') : (roomAt(view.pos.x, view.pos.z) || '집'); if (rl !== view.rl) { view.rl = rl; $('roomLab').textContent = rl; } drawMap(); }
   WORLD.updateCars(dt, cam, trafficDemand(S.doy,S.hour));
   if (SHADOW.dirty) { renderShadow(renderer); SHADOW.dirty = false; }
   // exposure adaptation + interior balance
   const ea = SHOT ? 1 : 1 - Math.exp(-dt * 2.5); ENV.exp = Math.exp(lerp(Math.log(ENV.exp), Math.log(ENV.expTarget), ea));
   const HU = HOME.uni; if (HU) { HU.uBoost.value = clamp(0.54 / (ENV.exp * Math.max(ENV.Lin, 1e-7)), 1, 40); HU.uBoostSun.value = Math.min(HU.uBoost.value, 1.7); }
   WORLD.lamps.material.uniforms.uPx.value = renderer.domElement.height / (2 * Math.tan(cam.fov * RAD / 2)) / 500;
-  renderFrame(renderer, extScene, homeScene, cam, !view.drone, ENV.exp);
+  renderFrame(renderer, extScene, homeScene, cam, !view.outdoors, ENV.exp);
 }
 
 async function boot() {
@@ -5208,9 +5203,9 @@ async function boot() {
     for (const o of [0, 0.05, 0.1]) { rect([x0 + o, y0 + o, zf], [x1 - o, y0 + o, zf], [x1 - o, y1 - o, zf], [x0 + o, y1 - o, zf]); rect([xe, y0 + o, 0 + o], [xe, y0 + o, zb - o], [xe, y1 - o, zb - o], [xe, y1 - o, 0 + o]); }
     const g = new THREE.BufferGeometry(); g.setAttribute('position', new THREE.Float32BufferAttribute(P, 3));
     const e = new THREE.LineSegments(g, new THREE.LineBasicMaterial({ color: 0xffc866 })); e.material.color.multiplyScalar(40); e.frustumCulled = false; marker = e; marker.visible = false; extScene.add(e); }
-  prog(0.9, '집 안을 꾸미는 중'); await new Promise(r => setTimeout(r, 20));
+  prog(0.9, '시점을 준비하는 중'); await new Promise(r => setTimeout(r, 20));
   HOME.floorLight = floorLight;
-  setupUI(); goView(QS.get('view') || 'living', true);
+  setupUI(); goView(QS.get('view') || S.room, true);
   addEventListener('resize', () => { const [w, h] = size(); renderer.setSize(w, h, false); cam.aspect = w / h; resizePost(Math.round(w * dpr), Math.round(h * dpr)); });
   Object.assign(WX, WEATHER[S.weather]); updateEnv(); ENV.exp = ENV.expTarget;
   prog(1, ''); $('load').classList.add('done'); if (SHOT) $('load').hidden = true; else setTimeout(() => { $('load').hidden = true; }, 900);

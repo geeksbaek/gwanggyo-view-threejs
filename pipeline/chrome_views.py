@@ -8,7 +8,7 @@ from threading import Thread
 from playwright.sync_api import sync_playwright
 
 ROOT = Path(__file__).resolve().parents[1]
-VIEWS = [('overview','drone',13), ('street','street',13), ('living','living',13),
+VIEWS = [('overview','overview',13), ('street','street',13), ('living','living',13),
          ('kitchen','kitchen',13), ('night','living',21)]
 
 def main():
@@ -50,7 +50,7 @@ def main():
             page.screenshot(path=args.output/(name+'.jpg'),quality=90,timeout=150000)
             info = page.evaluate('__gg.info()')
             if 'indoorLoaded' in info:
-                assert info['indoorLoaded'] == (view not in ('drone','street')), (view,info)
+                assert info['indoorLoaded'] == (view not in ('overview','street')), (view,info)
             if not args.software:
                 info['gpuFrameMs'] = page.evaluate('''async () => {
                   const gl = document.querySelector('#cv').getContext('webgl2');

@@ -25,6 +25,7 @@ body{background:var(--bg);color:var(--fg);font-family:var(--body);overflow:hidde
 #tip{position:absolute;left:0;top:0;z-index:5;pointer-events:none;padding:6px 10px;border-radius:9px;background:rgba(10,13,18,.82);border:1px solid var(--line);backdrop-filter:blur(8px);-webkit-backdrop-filter:blur(8px);font-size:13px;white-space:nowrap;box-shadow:0 4px 18px rgba(0,0,0,.35)}
 #tip b{font-weight:700} #tip span{margin-left:8px;color:var(--dim);font-size:12px;font-variant-numeric:tabular-nums}
 #stage.clean #top,#stage.clean #mapbox,#stage.clean #hud,#stage.clean #tip,#stage.clean #stick{display:none}
+#map.site-map{cursor:default}
 #toast{position:absolute;left:50%;bottom:calc(28px + env(safe-area-inset-bottom,0px));transform:translateX(-50%);z-index:6;pointer-events:none;padding:8px 14px;border-radius:999px;background:rgba(10,13,18,.8);border:1px solid var(--line);font-size:13px;white-space:nowrap}
 #stick{position:absolute;left:max(18px,env(safe-area-inset-left,0px));bottom:calc(64px + env(safe-area-inset-bottom,0px));width:96px;height:96px;border-radius:50%;background:rgba(14,17,22,.38);border:1px solid var(--line);touch-action:none;display:none;z-index:4}
 #stick i{position:absolute;left:50%;top:50%;width:44px;height:44px;margin:-22px 0 0 -22px;border-radius:50%;background:rgba(255,255,255,.55)}
@@ -69,7 +70,7 @@ input[type=range]::-moz-range-thumb{width:18px;height:18px;border-radius:50%;bac
   <a id="imageryCredit" href="https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer" target="_blank" rel="noopener">영상 © Esri, Vantor, Earthstar Geographics, GIS User Community</a>
   <div id="tip" hidden><b></b><span></span></div>
   <div id="top">
-    <button id="title" class="btn" type="button" aria-expanded="false"><b id="roomLab">거실</b><span id="clock"></span></button>
+    <button id="title" class="btn" type="button" aria-expanded="false"><b id="roomLab">단지 전경</b><span id="clock"></span></button>
     <div id="facts" hidden>
       <h1>광교 자연앤 센트레빌 1703동 1702호</h1>
       <p>84B · 17층 · 남동향 · 2029년 10월 입주 예정</p>
@@ -84,7 +85,7 @@ input[type=range]::-moz-range-thumb{width:18px;height:18px;border-radius:50%;bac
       </dl>
     </div>
   </div>
-  <div id="mapbox"><canvas id="map" aria-label="평면도. 눌러서 이동"></canvas><a id="mapcredit" href="https://www.openstreetmap.org/copyright" target="_blank" rel="noopener" hidden>© OpenStreetMap</a></div>
+  <div id="mapbox"><canvas id="map" class="site-map" aria-label="북쪽 기준 단지와 주변 도로 배치도"></canvas><a id="mapcredit" href="https://www.openstreetmap.org/copyright" target="_blank" rel="noopener" hidden>© OpenStreetMap</a></div>
   <div id="hud" class="min">
     <div class="panel">
       <div class="row"><label for="doy">날짜</label><input id="doy" type="range" min="0" max="364" step="1"><output id="dateLab" for="doy"></output></div>
@@ -95,7 +96,7 @@ input[type=range]::-moz-range-thumb{width:18px;height:18px;border-radius:50%;bac
         <div class="grp"><span>조명</span><div class="chips" id="lights"></div></div>
       </div>
     </div>
-    <div id="roomsbar"><button class="btn" id="hide" type="button" aria-pressed="false">시간·날씨</button><button class="btn" id="drone" type="button" aria-pressed="false">단지 전경</button><button class="btn" id="street" type="button">교차로</button><button class="btn" id="orbit" type="button" aria-pressed="false" hidden>자동 회전</button><button class="btn" id="clean" type="button">가리기</button><button class="btn" id="fs" type="button" aria-pressed="false">전체화면</button><button class="btn" id="bgm" type="button" aria-pressed="false">음악</button><a class="btn" id="bgmsrc" href="https://youtu.be/z13_ZlsAlYQ" target="_blank" rel="noopener" style="text-decoration:none">원곡 열기</a></div>
+    <div id="roomsbar"><button class="btn" id="hide" type="button" aria-pressed="false">시간·날씨</button><button class="btn" id="overview" type="button" aria-pressed="true">단지 전경</button><button class="btn" id="living" type="button" aria-pressed="false">집 안으로</button><button class="btn" id="street" type="button">교차로</button><button class="btn" id="orbit" type="button" aria-pressed="false" hidden>자동 회전</button><button class="btn" id="clean" type="button">가리기</button><button class="btn" id="fs" type="button" aria-pressed="false">전체화면</button><button class="btn" id="bgm" type="button" aria-pressed="false">음악</button><a class="btn" id="bgmsrc" href="https://youtu.be/z13_ZlsAlYQ" target="_blank" rel="noopener" style="text-decoration:none">원곡 열기</a></div>
   </div>
   <div id="stick" aria-hidden="true"><i></i></div>
   <div id="toast" hidden></div>
