@@ -224,7 +224,7 @@ function paintNightMap() {
 const TERRAIN_FS = /* glsl */`
 precision highp float;
 ${GLSL_COMMON}
-uniform sampler2D uSat, uSatInner, uDetail, uNightMap, uPaint; uniform float uHalf, uIsFar, uDetH, uNearH, uPaintH, uInnerH;
+uniform sampler2D uSat, uSatInner, uDetail, uNightMap, uPaint, uJunction; uniform float uHalf, uIsFar, uDetH, uNearH, uPaintH, uInnerH;
 varying vec3 vW; varying vec3 vN; varying vec2 vUv;
 void main(){
   if(uIsFar>0.5 && max(abs(vW.x),abs(vW.z))<uNearH-60.0) discard;
@@ -255,12 +255,19 @@ void main(){
   float isAsphalt=0.0;
   float g1=texture2D(uNoise,vW.xz*0.11).r, g2=texture2D(uNoise,vW.xz*1.7).g, g3=texture2D(uNoise,vW.xz*6.0).b;
 
+  // Restore the registered photo around the junction, including tree-lined
+  // shoulders, refuge islands and the red approach surface.
+  vec2 junctionUV=(vW.xz-vec2(30.0,-110.0))/vec2(230.0,220.0);
+  vec2 boundary=min(junctionUV,1.0-junctionUV)*vec2(230.0,220.0);
+  float edgeDist=min(boundary.x,boundary.y);
+  float neighborhood=(uInnerH>1.0) ? 1.0-smoothstep(520.0,720.0,length(vW.xz)) : 0.0;
+  float photoWeight=(1.0-uIsFar)*max(neighborhood,smoothstep(-32.0,-2.0,edgeDist));
   // Crisp vector roads, sidewalks, crosswalks, park trails & sports pitches (RGBA roadpaint.png)
   if(uIsFar<0.5 && uPaintH>1.0){
     vec2 puv=(vW.xz+uPaintH)/(2.0*uPaintH);
     if(puv.x>0.002&&puv.x<0.998&&puv.y>0.002&&puv.y<0.998){
       vec4 pt=texture2D(uPaint,puv);
-      float pe=smoothstep(0.0,0.025,min(min(puv.x,1.0-puv.x),min(puv.y,1.0-puv.y)))*pt.a;
+      float pe=smoothstep(0.0,0.025,min(min(puv.x,1.0-puv.x),min(puv.y,1.0-puv.y)))*pt.a*(1.0-photoWeight);
       if(pe>0.002){
         float lumP=dot(pt.rgb,vec3(0.3,0.59,0.11));
         float satP=max(pt.r,max(pt.g,pt.b))-min(pt.r,min(pt.g,pt.b));
@@ -306,6 +313,13 @@ void main(){
     }
   }
 
+  if(uIsFar<0.5 && edgeDist>0.0){
+    vec4 road=texture2D(uJunction,junctionUV);
+    float coverage=road.a*smoothstep(0.0,3.0,edgeDist);
+    alb=mix(alb,road.rgb*(0.92+0.12*g2),coverage);
+    veg*=1.0-coverage;
+    isAsphalt=max(isAsphalt,coverage);
+  }
   alb*=0.91+0.18*n2*smoothstep(900.0,60.0,d);
   float sn=uSnow*smoothstep(0.55,0.8,vN.y)*(0.82+0.18*n1);
   alb=mix(alb,vec3(0.86,0.89,0.94),sn*mix(0.95,0.72,veg));
@@ -337,6 +351,7 @@ void main(){
 }`;
 
 function buildTerrain(satN, satF, detail, nightMap, paint, satInner) {
+  const junction = junctionMarkings(satInner);
   const grp = new THREE.Group();
   const mk = (H, N, dem, seg, tex, far) => {
     const geo = new THREE.BufferGeometry(); const n = seg + 1, pos = new Float32Array(n * n * 3), uv = new Float32Array(n * n * 2), nor = new Float32Array(n * n * 3);
@@ -360,7 +375,7 @@ function buildTerrain(satN, satF, detail, nightMap, paint, satInner) {
     tex.flipY = false; tex.needsUpdate = true;
     const paintH = W.paintH || 640;
     const mat = new THREE.ShaderMaterial({
-      uniforms: { ...U, uSat: { value: tex }, uSatInner: { value: satInner || tex }, uInnerH: { value: satInner ? 900 : 0 }, uDetail: { value: detail }, uNightMap: { value: nightMap }, uHalf: { value: H }, uIsFar: { value: far ? 1 : 0 }, uDetH: { value: DET_H }, uPaint: { value: paint || detail }, uPaintH: { value: paint ? paintH : 0 }, uNearH: { value: W.HN } },
+      uniforms: { ...U, uSat: { value: tex }, uSatInner: { value: satInner || tex }, uInnerH: { value: satInner ? 900 : 0 }, uDetail: { value: detail }, uNightMap: { value: nightMap }, uHalf: { value: H }, uIsFar: { value: far ? 1 : 0 }, uDetH: { value: DET_H }, uJunction: { value: junction }, uPaint: { value: paint || detail }, uPaintH: { value: paint ? paintH : 0 }, uNearH: { value: W.HN } },
       vertexShader: `varying vec3 vW; varying vec3 vN; varying vec2 vUv; void main(){ vW=position; vN=normal; vUv=uv; gl_Position=projectionMatrix*viewMatrix*vec4(position,1.0); }`,
       fragmentShader: TERRAIN_FS,
     });
@@ -1233,7 +1248,7 @@ function buildLamps() {
         const x = x0 + ux * acc - uz * sd * (w / 2 + 1.1), z = z0 + uz * acc + ux * sd * (w / 2 + 1.1);
         const mappedNearby = Math.abs(x)<580 && Math.abs(z)<580 &&
           mapped.some(f => Math.abs(f.p[0]-x)<20 && Math.hypot(f.p[0]-x,f.p[1]-z)<20);
-        if (Math.abs(x) < 7900 && Math.abs(z) < 7900 && !mappedNearby) {
+        if (Math.abs(x) < 7900 && Math.abs(z) < 7900 && !mappedNearby && !withinJunctionRoad(x,z)) {
           const gy = groundY(x, z), lh = c >= 2 ? 9.2 : 6.4;
           pos.push(x, gy + lh, z); seed.push(((i * 31 + v) * 0.6180339) % 1, c);
           if (Math.hypot(x, z) < 520 && c >= 2 && Math.hypot(x - 110, z + 132) > 14 && Math.hypot(x - 28, z - 52) > 12) WORLD.poleSpots.push([x, gy, z, Math.atan2(-uz * sd, ux * sd), lh]);
@@ -1348,7 +1363,7 @@ function buildCars() {
       const a = p.pts[k - 1], b = p.pts[k], f = (c.t - a[2]) / Math.max(b[2] - a[2], 0.01); const dx = b[0] - a[0], dz = b[1] - a[1], L = Math.hypot(dx, dz) || 1;
       const nx = -dz / L, nz = dx / L;
       const x = lerp(a[0], b[0], f) + nx * c.laneOff, z = lerp(a[1], b[1], f) + nz * c.laneOff;
-      const y = active ? groundY(x, z) : -500;
+      const y = active && !withinJunctionRoad(x,z) ? groundY(x, z) : -500;
       pos.set(x, y, z); q.setFromAxisAngle(up, Math.atan2(dx * c.dir, dz * c.dir)); M.compose(pos, q, one); m.setMatrixAt(i, M);
       P[i * 3] = x; P[i * 3 + 1] = y + 0.72; P[i * 3 + 2] = z;
       A[i * 2] = ((cam.x - x) * dx + (cam.z - z) * dz) * c.dir > 0 ? 1 : 0;

@@ -48,3 +48,26 @@ assert.equal(stations.length,37);
 assert.ok(Math.hypot(stations.at(-1).x-57.75,stations.at(-1).z-48.6)<0.1);
 assert.ok(stations.every(s=>s.halfW>0 && Number.isFinite(s.z)));
 console.log('Verified 9 towers, 41 stacks, 600 homes, 10 piloti, road direction and tunnel alignment.');
+
+// Registration and stripe orientation of the two successive crossings and
+// the diagonal crossing, measured in the same five-pixels-per-metre frame.
+const zebras = vm.runInContext(read('src/19_junction.js')+'\nJUNCTION_CROSSWALKS',context);
+const center = q => [0,1].map(k=>q.reduce((sum,p)=>sum+p[k],0)/4);
+const rightPair = zebras.filter(q=>center(q)[0]>700 && center(q)[0]<1050);
+assert.equal(rightPair.length,2);
+const [inner,outer] = rightPair.map(center);
+assert.ok(Math.abs((outer[0]-inner[0])/5-57)<0.5);
+for (const [a,b,c] of rightPair) {
+  assert.ok(Math.abs(b[1]-a[1])<Math.abs(b[0]-a[0])/3);
+  assert.ok(c[1]-a[1]>95);
+}
+const [start,,end] = zebras.find(q=>center(q)[0]>420 && center(q)[0]<480);
+assert.ok(end[0]-start[0]>55 && end[1]-start[1]>80);
+console.log('Verified successive crosswalk spacing and orientation of the diagonal approach.');
+const projected = context.junctionTilePoint(150,-16,W.frame);
+assert.ok(Math.abs(projected[0]/256-447175.733213)<0.00001);
+assert.ok(Math.abs(projected[1]/256-203565.668876)<0.00001);
+for (const q of zebras) {
+  const [u,v]=center(q);
+  assert.ok(context.withinJunctionRoad(30+u/5,-110+v/5),'crossing outside the photographic road surface');
+}

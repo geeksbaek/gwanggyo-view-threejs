@@ -1075,13 +1075,17 @@ function buildWorldProps() {
     const tunL = 36.0;
     const tx = px + ux * (tunL * 0.5 + 1.0), tz = pz + uz * (tunL * 0.5 + 1.0);
     OP.box(tx, boreFloor, tz, tunL, 0.25, halfW*2, ang, C_ASPH, M_DARK);
-    OP.box(tx, pHeadY, tz, tunL, 0.35, halfW*2, ang, C_CONC, M_CONC);
+    // The underground ceiling faces into the bore. Its top surface is the
+    // registered terrain above, which slopes independently of the tunnel.
+    const ceiling = new THREE.PlaneGeometry(tunL, halfW*2);
+    ceiling.rotateX(Math.PI/2);
+    ceiling.rotateY(ang);
+    ceiling.translate(tx,pHeadY-0.175,tz);
+    OP.addGeo(ceiling,C_CONC,M_CONC);
     OP.box(px+ux*tunL,boreFloor+boreH/2,pz+uz*tunL,0.3,boreH,halfW*2,ang,C_DARK,M_DARK);
     for (const side of [-1,1]) {
       OP.box(tx+nx*halfW*side,boreFloor+boreH/2,tz+nz*halfW*side,tunL,boreH,0.3,ang,C_WALL,M_CONC);
     }
-    // Flush green landscaped triangle median capping the portal mouth (never towering above the intersection!)
-    OP.box(px + ux * 11.5, pHeadY + 0.15, pz + uz * 11.5, 22.0, 0.32, halfW * 1.88, ang, C_TURF, M_CONC);
     for (let k = 0; k < 6; k++) {
       const ld = 2.6 + k * 5.0;
       for (const sgn of [-1, 1]) {
@@ -1275,87 +1279,8 @@ function buildWorldProps() {
     }
   }
 
-  // ── 4. Bespoke 3D 정보과학고사거리 (법원사거리): Raised Traffic Islands (교통섬), 4-Corner Signal Gantries, Bus Shelters, Guardrails & Mini-Park!
+  // Surveyed stop locations and tagged street furniture.
   {
-    const C_TERRA = [0.56, 0.30, 0.24], C_CURB = [0.76, 0.74, 0.70];
-    // 4A) Two Raised Triangular Pedestrian Traffic Islands (NW 교통섬 & NE 교통섬 right by 1701동!)
-    const islands = [
-      { cx: 129.0, cz: 11.2, pts: [[111.5, 18.8], [137.0, 13.2], [138.0, 2.5]], ang: -0.35, w: 12.5, d: 8.5, shade: true },
-      { cx: 136.0, cz: -32.0, pts: [[137.2, -45.5], [146.0, -29.0], [124.5, -21.5]], ang: 0.55, w: 13.5, d: 9.2, shade: true },
-    ];
-    for (const isl of islands) {
-      const gy = groundY(isl.cx, isl.cz);
-      // Raised granite curb & pedestrian refuge platform (0.28m above asphalt)
-      const shp = new THREE.Shape(isl.pts.map(p => new THREE.Vector2(p[0], -p[1])));
-      const ext = new THREE.ExtrudeGeometry(shp, { depth: 0.36, bevelEnabled: false });
-      ext.rotateX(-Math.PI * 0.5);
-      ext.translate(0, gy - 0.08, 0);
-      OP.addGeo(ext, C_CURB, M_CONC);
-      // Protective galvanized pedestrian bollards & guardrails along island rim
-      for (let i = 0; i < isl.pts.length; i++) {
-        const a = isl.pts[i], b = isl.pts[(i + 1) % isl.pts.length];
-        for (const f of [0.22, 0.50, 0.78]) {
-          const bx = lerp(a[0], b[0], f), bz = lerp(a[1], b[1], f);
-          OP.cyl(bx, gy + 0.65, bz, 0.07, 0.08, 0.95, 6, C_POLE, M_METAL);
-        }
-        const mx = (a[0] + b[0]) * 0.5, mz = (a[1] + b[1]) * 0.5;
-        const L = Math.hypot(b[0] - a[0], b[1] - a[1]), ang = Math.atan2(-(b[1] - a[1]), b[0] - a[0]);
-        OP.box(mx, gy + 0.92, mz, L * 0.56, 0.07, 0.07, ang, C_POLE, M_METAL);
-      }
-      // Sunshade parasol / pedestrian waiting shelter on the traffic island (characteristic of Korean intersections!)
-      OP.cyl(isl.cx, gy + 1.85, isl.cz, 0.12, 0.14, 3.2, 8, C_METAL, M_METAL);
-      OP.cyl(isl.cx, gy + 3.45, isl.cz, 0.12, 2.35, 0.72, 6, [0.20, 0.44, 0.34], M_CONC);
-      // Pedestrian walk signal bollard on the island corner
-      OP.cyl(isl.pts[1][0] - 1.5, gy + 1.85, isl.pts[1][1] - 1.0, 0.08, 0.09, 3.3, 6, C_POLE, M_METAL);
-      OP.box(isl.pts[1][0] - 1.5, gy + 3.1, isl.pts[1][1] - 1.0, 0.34, 0.78, 0.24, isl.ang, C_METAL, M_METAL);
-      OP.box(isl.pts[1][0] - 1.5, gy + 2.9, isl.pts[1][1] - 1.0, 0.24, 0.24, 0.28, isl.ang, [0.15, 0.95, 0.45], M_LED);
-    }
-
-    // 4B) 4 Full-Span Galvanized Cantilever Traffic Signal Gantries at exact 4 outer corners of 정보과학고사거리!
-    const jGantries = [
-      { x: 138.0, z: 16.5,  ang: 0.02,   len: 12.5, green: true },  // NW corner spanning 월드컵로 NW
-      { x: 178.5, z: 4.5,   ang: -1.55,  len: 13.5, green: false }, // SW-W corner spanning 동수원로 SW
-      { x: 178.0, z: -33.5, ang: 1.58,   len: 13.5, green: false }, // SW-E corner spanning 동수원로 SW
-      { x: 136.5, z: -48.5, ang: 0.20,   len: 13.0, green: true },  // SE corner spanning 월드컵로 SE 6-lane
-      { x: 122.0, z: 9.0,   ang: -1.24,  len: 13.5, green: true },  // N corner spanning 광교중앙로 terracotta lanes
-    ];
-    for (const gt of jGantries) {
-      const gy = groundY(gt.x, gt.z);
-      OP.cyl(gt.x, gy + 3.85, gt.z, 0.14, 0.20, 7.7, 8, C_POLE, M_METAL);
-      const bx = gt.x + Math.cos(gt.ang) * (gt.len * 0.5), bz = gt.z - Math.sin(gt.ang) * (gt.len * 0.5);
-      OP.box(bx, gy + 7.25, bz, gt.len, 0.22, 0.22, gt.ang, C_POLE, M_METAL);
-      // Two 4-aspect Korean horizontal signal heads mounted along the long cantilever arm!
-      for (const f of [0.42, 0.80]) {
-        const hx = gt.x + Math.cos(gt.ang) * (gt.len * f), hz = gt.z - Math.sin(gt.ang) * (gt.len * f);
-        OP.box(hx, gy + 6.92, hz, 1.85, 0.52, 0.30, gt.ang, C_METAL, M_METAL);
-        const colL = gt.green ? [0.14, 0.96, 0.46] : [0.98, 0.20, 0.14];
-        OP.box(hx + Math.cos(gt.ang) * (gt.green ? 0.55 : -0.55), gy + 6.92, hz - Math.sin(gt.ang) * (gt.green ? 0.55 : -0.55), 0.30, 0.30, 0.36, gt.ang, colL, M_LED);
-      }
-      // Corner pedestrian signal pole
-      OP.box(gt.x, gy + 3.4, gt.z, 0.34, 0.78, 0.26, gt.ang, C_METAL, M_METAL);
-      OP.box(gt.x, gy + 3.2, gt.z, 0.24, 0.24, 0.32, gt.ang, gt.green ? [0.98, 0.22, 0.16] : [0.15, 0.95, 0.46], M_LED);
-    }
-
-    // 4C) Overhead Korean Directional Road Sign Gantry on 광교중앙로 terracotta southbound approach!
-    {
-      const sx = 104.5, sz = 21.5, gy = groundY(sx, sz);
-      const ang = Math.atan2(-(4.5 - 28.0), 127.0 - 99.0); // along southbound travel direction
-      const nx = Math.sin(ang), nz = Math.cos(ang);
-      for (const sgn of [-1, 1]) {
-        OP.cyl(sx + nx * 8.2 * sgn, gy + 4.4, sz + nz * 8.2 * sgn, 0.22, 0.26, 8.8, 8, C_POLE, M_METAL);
-      }
-      OP.box(sx, gy + 8.3, sz, 0.40, 0.45, 16.8, ang, C_POLE, M_METAL);
-      OP.box(sx, gy + 7.2, sz, 0.32, 0.32, 16.8, ang, C_POLE, M_METAL);
-      const dirSign = makeSignMesh('← 광교호수공원 · ↑ 영통 · → 정보과학고', {
-        bg: '#0b5d3b', fg: '#ffffff', w: 11.4, h: 2.15,
-        font: '700 50px "Noto Sans KR", sans-serif', track: 2,
-        sub: '정보과학고사거리 (광교중앙로 · 월드컵로)', glow: 0.95, border: '#ffffff',
-      });
-      dirSign.position.set(sx - Math.cos(ang) * 0.35, gy + 7.75, sz + Math.sin(ang) * 0.35);
-      dirSign.rotation.y = Math.atan2(-Math.cos(ang), Math.sin(ang));
-      grp.add(dirSign);
-    }
-
     // A platform node records a stop, but only an explicit shelter tag confirms a canopy.
     for (const stop of NEIGHBORHOOD.stops) {
       const [x,z] = stop.p, y = groundY(x,z);
@@ -1372,28 +1297,9 @@ function buildWorldProps() {
       }
     }
 
-    // 4E) NW Corner Mini-Park Pavilion (법원사거리 소공원 — visible right behind NW slip lane in Naver aerial photo!)
-    {
-      const px = 117.5, pz = 46.0, gy = groundY(px, pz), ang = -0.62;
-      OP.box(px, gy + 0.22, pz, 11.5, 0.44, 6.8, ang, C_CURB, M_CONC);
-      OP.box(px, gy + 3.45, pz, 10.6, 0.32, 5.8, ang, C_WOOD, M_WOOD);
-      OP.box(px, gy + 3.66, pz, 11.0, 0.16, 6.2, ang, C_WHITE, M_CONC);
-      for (const [dx, dz] of [[-4.4, -2.2], [0, -2.2], [4.4, -2.2], [-4.4, 2.2], [0, 2.2], [4.4, 2.2]]) {
-        const ca = Math.cos(ang), sa = Math.sin(ang);
-        OP.cyl(px + dx * ca - dz * sa, gy + 1.85, pz + dx * sa + dz * ca, 0.16, 0.18, 3.2, 6, C_CONC, M_CONC);
-      }
-      OP.box(px, gy + 3.24, pz, 8.8, 0.10, 0.22, ang, C_LED, M_LED);
-    }
-
-    // 4F) Planted Median Islands along 월드컵로 SE Boulevard (matching the green tree medians inside the yellow chevron zone!)
-    for (const [mx, mz, ang] of [[143.5, -75.0, 1.24], [126.5, -112.0, 0.98]]) {
-      const gy = groundY(mx, mz);
-      OP.box(mx, gy + 0.18, mz, 9.5, 0.36, 2.4, ang, C_CURB, M_CONC);
-      OP.box(mx, gy + 0.40, mz, 8.8, 0.16, 1.8, ang, C_TURF, M_CONC);
-    }
   }
 
-  // ── 5. 3D Traffic Signal Gantries at Other Major Intersections (skip 정보과학고사거리 since bespoke 4-corner gantries are placed above!)
+  // Signal positions and phases at the photographed junction are unverified.
   if (W.signals && W.signals.length) {
     for (let i = 0; i < W.signals.length; i++) {
       const [sx, sz] = W.signals[i];

@@ -396,6 +396,7 @@ async function boot() {
   Object.assign(WX, WEATHER[S.weather]); updateEnv(); ENV.exp = ENV.expTarget;
   prog(1, ''); $('load').classList.add('done'); if (SHOT) $('load').hidden = true; else setTimeout(() => { $('load').hidden = true; }, 900);
   window.__doors = HOME.doors; window.__gg = { S, view, ENV, WX, goView, frame: (n = 1, dt = 0.016) => { for (let i = 0; i < n; i++) tick(dt); }, set: (o) => { Object.assign(S, o); if (o.weather) Object.assign(WX, WEATHER[o.weather]); ENV.dirty = true; }, info: () => ({ tris: renderer.info.render.triangles, calls: renderer.info.render.calls, trees: WORLD.treeTris }) };
+  loadJunctionPhoto(WORLD.terrain.material.uniforms.uJunction.value,W.frame);
   if (SHOT) return;
   let last = performance.now();
   // keep it fluid on slower GPUs: step the render resolution down while frames stay long
